@@ -1,240 +1,59 @@
+import { TYPE_CHART } from './typeChart.js';
+import { calculateDamage } from './damage.js';
 
-/* =========================================
-   POKEMON BATTLE ARENA
-   INTEGRANTE 2 - SISTEMA DE BATALHA
-   Arquivo: src/battle.js
-========================================= */
-
-import {
-    calcularDano,
-    verificarPrecisao
-} from "./damage.js";
-
-// Prepara uma cópia do Pokémon para a batalha.
-function prepararPokemon(pokemon) {
-    if (!pokemon || !pokemon.nome) {
-        throw new Error("Pokémon inválido.");
-    }
-
-    const hpMax = Number(pokemon.hpMax ?? pokemon.hp);
-
-    if (!Number.isFinite(hpMax) || hpMax <= 0) {
-        throw new Error(
-            `${pokemon.nome} precisa ter HP máximo válido.`
-        );
-    }
-
-    return {
-        ...pokemon,
-        tipos: [...pokemon.tipos],
-        hpMax,
-        hpAtual: hpMax,
-        derrotado: false
-    };
+function scaleStat(base, level) {
+  return Math.max(1, Math.floor((2 * Math.max(1, Number(base) || 1) * level) / 100) + 5);
 }
 
-// Inicia uma batalha entre dois Pokémon.
-export function criarBatalha(
-    pokemonJogador,
-    pokemonAdversario,
-    typeChart
-) {
-    if (!pokemonJogador || !pokemonAdversario) {
-        throw new Error(
-            "Escolha os dois Pokémon para iniciar a batalha."
-        );
-    }
-
-    if (!typeChart) {
-        throw new Error(
-            "A tabela de efetividade dos tipos não foi carregada."
-        );
-    }
-
-    return {
-        jogador: prepararPokemon(pokemonJogador),
-        adversario: prepararPokemon(pokemonAdversario),
-        typeChart,
-        turno: 1,
-        finalizada: false,
-        vencedor: null,
-        historico: []
-    };
+function preparePokemon(pokemon, level) {
+  if (!pokemon?.name) throw new Error('Pokémon inválido.');
+  const base = pokemon.baseStats || pokemon.stats || {};
+  const hpBase = Math.max(1, Number(base.hp) || 50);
+  return {
+    ...pokemon,
+    types: [...(pokemon.types || ['normal'])],
+    level,
+    hpMax: Math.floor((2 * hpBase * level) / 100) + level + 10,
+    hp: Math.floor((2 * hpBase * level) / 100) + level + 10,
+    attack: scaleStat(base.attack, level),
+    defense: scaleStat(base.defense, level),
+    specialAttack: scaleStat(base.specialAttack ?? base.special_attack, level),
+    specialDefense: scaleStat(base.specialDefense ?? base.special_defense, level),
+    speed: scaleStat(base.speed, level),
+    moves: [...(pokemon.moves || [])],
+  };
 }
 
-// Executa um ataque de um Pokémon contra o outro.
-function executarAtaque(
-    batalha,
-    atacante,
-    defensor,
-    ataque
-) {
-    if (atacante.derrotado || defensor.derrotado) {
-        return null;
-    }
-
-    if (!ataque || !ataque.nome || !ataque.tipo) {
-        return {
-            mensagem: "Ataque inválido.",
-            dano: 0
-        };
-    }
-
-    if (!verificarPrecisao(ataque)) {
-        return {
-            mensagem:
-                `${atacante.nome} usou ${ataque.nome}, mas errou!`,
-            dano: 0
-        };
-    }
-
-    const resultado = calcularDano(
-        atacante,
-        defensor,
-        ataque,
-        batalha.typeChart
-    );
-
-    defensor.hpAtual = Math.max(
-        0,
-        defensor.hpAtual - resultado.dano
-    );
-
-    if (defensor.hpAtual === 0) {
-        defensor.derrotado = true;
-    }
-
-    let mensagem =
-        `${atacante.nome} usou ${ataque.nome}!`;
-
-    if (resultado.efetividade === 0) {
-        mensagem += " Não teve efeito!";
-    } else if (resultado.efetividade > 1) {
-        mensagem += " Foi super efetivo!";
-    } else if (resultado.efetividade < 1) {
-        mensagem += " Não foi muito efetivo...";
-    }
-
-    if (defensor.derrotado) {
-        mensagem += ` ${defensor.nome} foi derrotado!`;
-    }
-
-    return {
-        mensagem,
-        dano: resultado.dano,
-        efetividade: resultado.efetividade,
-        hpRestante: defensor.hpAtual
-    };
+export function createBattle(playerPokemon, enemyPokemon, typeChart = TYPE_CHART, { level = 50 } = {}) {
+  if (!playerPokemon || !enemyPokemon) throw new Error('Escolha os dois Pokémon para iniciar a batalha.');
+  return {
+    player: preparePokemon(playerPokemon, level),
+    enemy: preparePokemon(enemyPokemon, level),
+    typeChart, round: 1, over: false, winner: null, history: [],
+  };
 }
 
-// Organiza os ataques por velocidade.
-function definirOrdem(batalha, ataqueJogador, ataqueAdversario) {
-    const jogador = batalha.jogador;
-    const adversario = batalha.adversario;
-
-    const velocidadeJogador = jogador.velocidade ?? 0;
-    const velocidadeAdversario = adversario.velocidade ?? 0;
-
-    if (velocidadeJogador === velocidadeAdversario) {
-        return Math.random() < 0.5
-            ? [
-                [jogador, adversario, ataqueJogador],
-                [adversario, jogador, ataqueAdversario]
-            ]
-            : [
-                [adversario, jogador, ataqueAdversario],
-                [jogador, adversario, ataqueJogador]
-            ];
-    }
-
-    return velocidadeJogador > velocidadeAdversario
-        ? [
-            [jogador, adversario, ataqueJogador],
-            [adversario, jogador, ataqueAdversario]
-        ]
-        : [
-            [adversario, jogador, ataqueAdversario],
-            [jogador, adversario, ataqueJogador]
-        ];
+export function performAttack(battle, side, move, random = Math.random) {
+  if (!battle || battle.over) return null;
+  const attacker = battle[side];
+  const defender = battle[side === 'player' ? 'enemy' : 'player'];
+  if (!attacker || !defender || defender.hp <= 0 || attacker.hp <= 0 || !move) return null;
+  const result = calculateDamage(attacker, defender, move, battle.typeChart, random);
+  defender.hp = Math.max(0, defender.hp - result.damage);
+  if (defender.hp <= 0) {
+    battle.over = true;
+    battle.winner = side;
+  }
+  const action = {
+    side, attacker, defender, move,
+    damage: result.damage, effectiveness: result.effectiveness,
+    critical: result.critical, missed: result.missed, hpRemaining: defender.hp,
+  };
+  battle.history.push(action);
+  return action;
 }
 
-// Executa um turno completo da batalha.
-export function executarTurno(
-    batalha,
-    ataqueJogador,
-    ataqueAdversario
-) {
-    if (batalha.finalizada) {
-        return {
-            turno: batalha.turno,
-            mensagens: ["A batalha já terminou."],
-            finalizada: true,
-            vencedor: batalha.vencedor
-        };
-    }
-
-    const ataques = definirOrdem(
-        batalha,
-        ataqueJogador,
-        ataqueAdversario
-    );
-
-    const mensagens = [];
-
-    for (const [atacante, defensor, ataque] of ataques) {
-        // Se o primeiro golpe derrotar o adversário,
-        // ele não terá oportunidade de atacar.
-        if (batalha.finalizada) break;
-        if (atacante.derrotado || defensor.derrotado) continue;
-
-        const resultado = executarAtaque(
-            batalha,
-            atacante,
-            defensor,
-            ataque
-        );
-
-        if (resultado) {
-            mensagens.push(resultado.mensagem);
-            batalha.historico.push(resultado.mensagem);
-        }
-
-        if (batalha.jogador.derrotado) {
-            batalha.vencedor = batalha.adversario;
-            batalha.finalizada = true;
-        } else if (batalha.adversario.derrotado) {
-            batalha.vencedor = batalha.jogador;
-            batalha.finalizada = true;
-        }
-
-        if (batalha.finalizada) {
-            const mensagemFinal =
-                `${batalha.vencedor.nome} venceu a batalha!`;
-
-            mensagens.push(mensagemFinal);
-            batalha.historico.push(mensagemFinal);
-            break;
-        }
-    }
-
-    if (!batalha.finalizada) {
-        batalha.turno++;
-    }
-
-    return {
-        turno: batalha.turno,
-        mensagens,
-        finalizada: batalha.finalizada,
-        vencedor: batalha.vencedor,
-        jogador: {
-            nome: batalha.jogador.nome,
-            hpAtual: batalha.jogador.hpAtual,
-            hpMax: batalha.jogador.hpMax
-        },
-        adversario: {
-            nome: batalha.adversario.nome,
-            hpAtual: batalha.adversario.hpAtual,
-            hpMax: batalha.adversario.hpMax
-        }
-    };
+export function advanceRound(battle) {
+  if (battle && !battle.over) battle.round += 1;
+  return battle?.round ?? 0;
 }

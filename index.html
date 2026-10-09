@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0d0e13">
+  <meta name="description" content="Escolha seu Pokémon e entre em uma batalha clássica no navegador.">
+  <title>Pokémon Battle Arena</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+  <script type="module" src="main.js"></script>
+</head>
+<body>
+  <noscript>Ative o JavaScript para jogar.</noscript>
+  <main class="game" id="game"><div class="viewport">
+    <section class="screen screen--title backdrop" id="screen-title" data-screen="title" aria-labelledby="title-heading">
+      <div class="pokeball pokeball--title" aria-hidden="true"></div>
+      <h1 class="logo" id="title-heading"><span class="logo__top">POKÉMON</span><span class="logo__bottom">BATTLE ARENA</span></h1>
+      <button class="start" type="button" id="btn-start" data-autofocus>APERTE START</button>
+      <p class="legal">Projeto acadêmico. Pokémon © Nintendo.</p>
+    </section>
+    <section class="screen screen--menu backdrop" id="screen-menu" data-screen="menu" data-back="title" hidden aria-label="Menu principal">
+      <div class="pokeball pokeball--menu" aria-hidden="true"></div>
+      <nav class="box menu" data-nav="vertical" aria-label="Menu principal">
+        <button class="menu-item" type="button" data-action="play" data-hint="Escolha um Pokémon e enfrente o adversário."><span>NOVA BATALHA</span></button>
+        <button class="menu-item" type="button" data-action="difficulty" data-hint="Ajuste o comportamento da IA adversária."><span>DIFICULDADE</span><span class="menu-item__value" id="difficulty-label">NORMAL</span></button>
+        <button class="menu-item" type="button" data-action="sound" data-hint="Ative ou silencie a música de batalha."><span>MÚSICA</span><span class="menu-item__value" id="sound-label">LIGADA</span></button>
+        <button class="menu-item" type="button" data-goto="credits" data-hint="Veja os dados e recursos usados no projeto."><span>CRÉDITOS</span></button>
+      </nav>
+      <p class="box--dark dialog" id="menu-hint" aria-live="polite"></p>
+    </section>
+    <section class="screen screen--credits backdrop" id="screen-credits" data-screen="credits" data-back="menu" hidden aria-labelledby="credits-heading">
+      <div class="box credits">
+        <h2 id="credits-heading">CRÉDITOS</h2>
+        <dl class="credits__list">
+          <div><dt>Projeto</dt><dd>Pokémon Battle Arena</dd></div>
+          <div><dt>Dados e sprites</dt><dd>PokéAPI</dd></div>
+          <div><dt>Sistema</dt><dd>Batalha por turnos</dd></div>
+        </dl>
+        <p class="credits__note">Pokémon e personagens pertencem aos seus respectivos titulares. Trilha carregada do arquivo local do projeto.</p>
+      </div>
+      <div class="footer-actions"><button class="btn" type="button" data-goto="menu">VOLTAR</button></div>
+    </section>
+    <section class="screen screen--selection" id="screen-selection" data-screen="selection" data-back="menu" hidden aria-labelledby="selection-heading">
+      <header class="selection__header">
+        <h2 id="selection-heading">ESCOLHA SEU POKÉMON</h2>
+        <input class="selection__search" id="selection-search" type="search" placeholder="Nome ou nº" aria-label="Buscar Pokémon por nome ou número" autocomplete="off" spellcheck="false">
+      </header>
+      <div class="selection__grid" id="selection-grid" data-nav="grid" data-cols="5" role="group" aria-label="Pokémon disponíveis"></div>
+      <aside class="box selection__preview" id="selection-preview" aria-live="polite"><p class="preview__hint">Escolha um Pokémon na lista.</p></aside>
+      <p class="selection__status" id="selection-status" aria-live="polite"></p>
+      <footer class="selection__footer" data-nav="horizontal">
+        <button class="btn" type="button" data-goto="menu">VOLTAR</button>
+        <button class="btn btn--primary" type="button" id="btn-confirm" data-action="confirm" disabled>ESCOLHER</button>
+      </footer>
+    </section>
+    <section class="screen screen--battle" id="screen-battle" data-screen="battle" hidden aria-label="Batalha">
+      <div class="battle__field">
+        <div class="battle__bg" id="battle-bg"></div>
+        <div class="platform platform--enemy"></div><div class="platform platform--player"></div>
+        <img class="sprite sprite--enemy" id="enemy-sprite" alt="">
+        <div class="sprite-fallback sprite-fallback--enemy" id="enemy-sprite-fallback" aria-hidden="true" hidden></div>
+        <img class="sprite sprite--player" id="player-sprite" alt="">
+        <div class="sprite-fallback sprite-fallback--player" id="player-sprite-fallback" aria-hidden="true" hidden></div>
+        <div class="box status status--enemy" id="enemy-status">
+          <div class="status__line"><span class="status__name" id="enemy-name">---</span><span class="status__level">Nv<span id="enemy-level">50</span></span></div>
+          <div class="hp"><span class="hp__label">HP</span><div class="hp__track" role="progressbar" aria-label="HP do adversário" aria-valuemin="0" aria-valuemax="100" aria-valuenow="100"><div class="hp__fill" id="enemy-hp-bar" data-state="high" style="--hp:1"></div></div></div>
+          <p class="status__hp-text"><span id="enemy-hp-current">--</span>/<span id="enemy-hp-max">--</span></p>
+        </div>
+        <div class="box status status--player" id="player-status">
+          <div class="status__line"><span class="status__name" id="player-name">---</span><span class="status__level">Nv<span id="player-level">50</span></span></div>
+          <div class="hp"><span class="hp__label">HP</span><div class="hp__track" role="progressbar" aria-label="Seu HP" aria-valuemin="0" aria-valuemax="100" aria-valuenow="100"><div class="hp__fill" id="player-hp-bar" data-state="high" style="--hp:1"></div></div></div>
+          <p class="status__hp-text"><span id="player-hp-current">--</span>/<span id="player-hp-max">--</span></p>
+        </div>
+      </div>
+      <div class="battle__dialog" id="battle-dialog" data-mode="text">
+        <p class="battle__text box--dark" id="battle-text" aria-live="polite"></p>
+        <div class="battle__actions box" data-nav="vertical">
+          <button class="menu-item" type="button" id="btn-fight">LUTAR</button>
+          <button class="menu-item" type="button" id="btn-quit">DESISTIR</button>
+        </div>
+        <div class="battle__moves box">
+          <div class="moves" id="move-buttons" data-nav="grid" data-cols="2"></div>
+          <div class="move-info" id="move-info" aria-live="polite"></div>
+        </div>
+      </div>
+      <div class="result" id="battle-result" data-outcome="" hidden>
+        <div class="box result__box">
+          <h2 class="result__title" id="result-title">FIM DA BATALHA</h2>
+          <div class="result__actions" data-nav="horizontal">
+            <button class="btn btn--primary" type="button" id="btn-rematch" data-action="rematch">REVANCHE</button>
+            <button class="btn" type="button" data-goto="menu">MENU</button>
+          </div>
+        </div>
+      </div>
+    </section>
+    <div class="fade" id="fade" aria-hidden="true"></div>
+  </div></main>
+  <audio id="battle-music" loop preload="none" aria-hidden="true">
+    <source src="assets/audio/Pokémon Red, Blue and Yellow - Battle! Trainer Red Music [4bit] - Pokeli.mp3" type="audio/mpeg">
+  </audio>
+  <p class="rotate-hint">Gire o aparelho para jogar em tela maior.</p>
+</body>
+</html>

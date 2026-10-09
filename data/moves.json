@@ -1,0 +1,77 @@
+{
+"normal":[
+{"id":"tackle","name":"Investida","type":"normal","power":40,"accuracy":100,"category":"physical"},
+{"id":"quick-attack","name":"Ataque Rápido","type":"normal","power":40,"accuracy":100,"category":"physical"},
+{"id":"slam","name":"Bate-estaca","type":"normal","power":80,"accuracy":75,"category":"physical"},
+{"id":"hyper-beam","name":"Hiper Raio","type":"normal","power":150,"accuracy":90,"category":"physical"}],
+"fire":[
+{"id":"ember","name":"Brasa","type":"fire","power":40,"accuracy":100,"category":"special"},
+{"id":"flame-wheel","name":"Roda de Fogo","type":"fire","power":60,"accuracy":100,"category":"special"},
+{"id":"flamethrower","name":"Lança-chamas","type":"fire","power":90,"accuracy":100,"category":"special"},
+{"id":"fire-blast","name":"Explosão de Fogo","type":"fire","power":110,"accuracy":85,"category":"special"}],
+"water":[
+{"id":"water-gun","name":"Jato d'Água","type":"water","power":40,"accuracy":100,"category":"special"},
+{"id":"bubble-beam","name":"Raio de Bolhas","type":"water","power":65,"accuracy":100,"category":"special"},
+{"id":"surf","name":"Surfar","type":"water","power":90,"accuracy":100,"category":"special"},
+{"id":"hydro-pump","name":"Hidro Bomba","type":"water","power":110,"accuracy":80,"category":"special"}],
+"electric":[
+{"id":"thunder-shock","name":"Choque do Trovão","type":"electric","power":40,"accuracy":100,"category":"special"},
+{"id":"spark","name":"Faísca","type":"electric","power":65,"accuracy":100,"category":"special"},
+{"id":"thunderbolt","name":"Raio","type":"electric","power":90,"accuracy":100,"category":"special"},
+{"id":"thunder","name":"Trovão","type":"electric","power":110,"accuracy":70,"category":"special"}],
+"grass":[
+{"id":"vine-whip","name":"Chicote de Vinha","type":"grass","power":45,"accuracy":100,"category":"special"},
+{"id":"razor-leaf","name":"Folha Navalha","type":"grass","power":55,"accuracy":95,"category":"special"},
+{"id":"giga-drain","name":"Giga Dreno","type":"grass","power":75,"accuracy":100,"category":"special"},
+{"id":"solar-beam","name":"Raio Solar","type":"grass","power":120,"accuracy":100,"category":"special"}],
+"ice":[
+{"id":"ice-shard","name":"Caco de Gelo","type":"ice","power":40,"accuracy":100,"category":"special"},
+{"id":"icy-wind","name":"Vento Gelado","type":"ice","power":55,"accuracy":95,"category":"special"},
+{"id":"ice-beam","name":"Raio de Gelo","type":"ice","power":90,"accuracy":100,"category":"special"},
+{"id":"blizzard","name":"Nevasca","type":"ice","power":110,"accuracy":70,"category":"special"}],
+"fighting":[
+{"id":"karate-chop","name":"Golpe de Karatê","type":"fighting","power":50,"accuracy":100,"category":"physical"},
+{"id":"brick-break","name":"Quebra-telha","type":"fighting","power":75,"accuracy":100,"category":"physical"},
+{"id":"submission","name":"Submissão","type":"fighting","power":80,"accuracy":80,"category":"physical"},
+{"id":"close-combat","name":"Combate Corpo a Corpo","type":"fighting","power":120,"accuracy":100,"category":"physical"}],
+"poison":[
+{"id":"acid","name":"Ácido","type":"poison","power":40,"accuracy":100,"category":"physical"},
+{"id":"poison-sting","name":"Ferrão Venenoso","type":"poison","power":50,"accuracy":100,"category":"physical"},
+{"id":"sludge","name":"Lodo","type":"poison","power":65,"accuracy":100,"category":"physical"},
+{"id":"sludge-bomb","name":"Bomba de Lodo","type":"poison","power":90,"accuracy":100,"category":"physical"}],
+"ground":[
+{"id":"mud-slap","name":"Ataque de Lama","type":"ground","power":55,"accuracy":95,"category":"physical"},
+{"id":"dig","name":"Escavar","type":"ground","power":80,"accuracy":100,"category":"physical"},
+{"id":"earthquake","name":"Terremoto","type":"ground","power":100,"accuracy":100,"category":"physical"},
+{"id":"fissure","name":"Fissura","type":"ground","power":150,"accuracy":30,"category":"physical"}],
+"flying":[
+{"id":"gust","name":"Rajada de Vento","type":"flying","power":40,"accuracy":100,"category":"physical"},
+{"id":"wing-attack","name":"Ataque de Asa","type":"flying","power":60,"accuracy":100,"category":"physical"},
+{"id":"aerial-ace","name":"Ás dos Ares","type":"flying","power":60,"accuracy":100,"category":"physical"},
+{"id":"brave-bird","name":"Pássaro Bravo","type":"flying","power":120,"accuracy":100,"category":"physical"}],
+"psychic":[
+{"id":"confusion","name":"Confusão","type":"psychic","power":50,"accuracy":100,"category":"special"},
+{"id":"psybeam","name":"Raio Psíquico","type":"psychic","power":65,"accuracy":100,"category":"special"},
+{"id":"psychic","name":"Psíquico","type":"psychic","power":90,"accuracy":100,"category":"special"},
+{"id":"future-sight","name":"Visão do Futuro","type":"psychic","power":120,"accuracy":100,"category":"special"}],
+"bug":[
+{"id":"bug-bite","name":"Picada","type":"bug","power":60,"accuracy":100,"category":"physical"},
+{"id":"pin-missile","name":"Míssil de Espinhos","type":"bug","power":70,"accuracy":95,"category":"physical"},
+{"id":"x-scissor","name":"Corte X","type":"bug","power":80,"accuracy":100,"category":"physical"},
+{"id":"megahorn","name":"Megachifre","type":"bug","power":120,"accuracy":85,"category":"physical"}],
+"rock":[
+{"id":"rock-throw","name":"Lançamento de Pedra","type":"rock","power":50,"accuracy":90,"category":"physical"},
+{"id":"rock-tomb","name":"Tumba de Pedra","type":"rock","power":60,"accuracy":95,"category":"physical"},
+{"id":"rock-slide","name":"Deslizamento de Pedra","type":"rock","power":75,"accuracy":90,"category":"physical"},
+{"id":"stone-edge","name":"Lâmina de Pedra","type":"rock","power":100,"accuracy":80,"category":"physical"}],
+"ghost":[
+{"id":"lick","name":"Lambida","type":"ghost","power":30,"accuracy":100,"category":"physical"},
+{"id":"shadow-punch","name":"Soco das Sombras","type":"ghost","power":60,"accuracy":100,"category":"physical"},
+{"id":"shadow-claw","name":"Garra Sombria","type":"ghost","power":70,"accuracy":100,"category":"physical"},
+{"id":"shadow-ball","name":"Bola Sombria","type":"ghost","power":80,"accuracy":100,"category":"physical"}],
+"dragon":[
+{"id":"twister","name":"Ciclone","type":"dragon","power":40,"accuracy":100,"category":"special"},
+{"id":"dragon-breath","name":"Sopro do Dragão","type":"dragon","power":60,"accuracy":100,"category":"special"},
+{"id":"dragon-claw","name":"Garra de Dragão","type":"dragon","power":80,"accuracy":100,"category":"special"},
+{"id":"outrage","name":"Fúria do Dragão","type":"dragon","power":120,"accuracy":100,"category":"special"}]
+}
