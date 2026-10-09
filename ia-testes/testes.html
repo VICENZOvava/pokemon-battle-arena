@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Testes da IA — Pokémon Battle Arena</title>
+  <style>
+    body { font-family: Arial, sans-serif; max-width: 760px; margin: 40px auto; padding: 0 18px; background: #f4f6fb; color: #202536; }
+    main { background: white; padding: 24px; border-radius: 14px; box-shadow: 0 4px 18px #00000012; }
+    h1 { margin-top: 0; }
+    #resumo { font-weight: bold; margin: 16px 0; }
+    li { padding: 10px; margin: 8px 0; border-radius: 8px; list-style: none; }
+    ul { padding: 0; }
+    .passou { background: #e7f8ed; color: #176b35; }
+    .falhou { background: #ffebeb; color: #a52020; }
+    .nota { color: #5b6272; font-size: .95rem; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Pokémon Battle Arena</h1>
+    <h2>Testes da inteligência artificial</h2>
+    <p class="nota">Esta página usa Pokémon e ataques fictícios para validar as decisões iniciais da IA.</p>
+    <p id="resumo">Executando testes…</p>
+    <ul id="resultados"></ul>
+  </main>
+  <script src="ia.js"></script>
+  <script src="testes-ia.js"></script>
+</body>
+</html>
