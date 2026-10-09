@@ -166,7 +166,7 @@ export async function mountBattle(root, { playerId, difficulty, onExit, signal: 
       const attackerSprite = $('#' + side + '-sprite', root);
       const targetSprite = $('#' + targetSide + '-sprite', root);
       $('#battle-text', root).textContent = attacker.name + ' usou ' + move.name + '!';
-      await animate(attackerSprite, side === 'player' ? 'is-attacking-player' : 'is-attacking-enemy', 600, signal);
+      await animate(attackerSprite, side === 'player' ? 'is-attacking-player' : 'is-attacking-enemy', 700, signal);
       if (signal.aborted) return;
 
       const action = performAttack(battle, side, move);
@@ -176,7 +176,7 @@ export async function mountBattle(root, { playerId, difficulty, onExit, signal: 
         $('#battle-text', root).textContent = attacker.name + ' errou o ataque!';
       } else {
         updateHealth(root, targetSide, action.defender);
-        if (action.damage > 0) await animate(targetSprite, 'is-hit', 650, signal);
+        if (action.damage > 0) await animate(targetSprite, 'is-hit', 750, signal);
         let message = action.damage > 0 ? 'Causou ' + action.damage + ' de dano.' : 'O golpe não causou dano.';
         if (action.effectiveness > 1) message += ' Foi super efetivo!';
         else if (action.effectiveness > 0 && action.effectiveness < 1) message += ' Não foi muito efetivo…';
@@ -185,11 +185,11 @@ export async function mountBattle(root, { playerId, difficulty, onExit, signal: 
         $('#battle-text', root).textContent = message;
       }
       if (battle.over) {
-        await animate(targetSprite, 'is-fainting', 800, signal);
+        await animate(targetSprite, 'is-fainting', 900, signal);
         $('#battle-text', root).textContent = battle[side === 'player' ? 'enemy' : 'player'].name + ' foi derrotado!';
-        await wait(650, signal);
+        await wait(800, signal);
       } else {
-        await wait(650, signal);
+        await wait(800, signal);
       }
     }
     async function takeTurn(playerMove) {
