@@ -599,7 +599,7 @@ noscript { color: #fff; font-size: 12px; }
   width: calc(var(--hp, 1) * 100%);
   height: 100%;
   background: var(--hp-high);
-  transition: width 0.9s linear;
+  transition: width 1.1s linear;
 }
 
 .hp__fill[data-state="mid"] { background: var(--hp-mid); }
@@ -660,17 +660,20 @@ noscript { color: #fff; font-size: 12px; }
 /* Botão de ataque: adicione também a classe de tipo, ex.: class="move-btn type--fire" */
 .move-btn {
   position: relative;
-  padding: var(--u2) var(--u3) var(--u2) var(--u8);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: calc(var(--u) * 0.5);
+  padding: var(--u) var(--u2) var(--u) var(--u8);
   overflow: hidden;
   border: 0;
   background: none;
   box-shadow: inset calc(var(--u) * -2) 0 0 var(--type-color, transparent);
   color: inherit;
-  font-size: var(--u6);
+  font-size: calc(var(--u) * 4.5);
+  line-height: 1.15;
   text-align: left;
-  text-overflow: ellipsis;
   text-transform: uppercase;
-  white-space: nowrap;
   cursor: pointer;
   touch-action: manipulation;
 }
@@ -689,22 +692,46 @@ noscript { color: #fff; font-size: 12px; }
 
 .move-btn:focus { outline: none; }
 .move-btn:focus::before { opacity: 1; }
-.move-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.move-btn:disabled { opacity: 0.48; cursor: not-allowed; }
+.move-btn__name {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.move-btn__stats {
+  color: #575361;
+  font-size: calc(var(--u) * 3.4);
+  line-height: 1.2;
+  white-space: nowrap;
+}
+.move-btn__cooldown {
+  color: var(--fire-deep);
+  font-size: calc(var(--u) * 3.2);
+  line-height: 1.15;
+  white-space: nowrap;
+}
+.move-btn__cooldown:empty { display: none; }
 
 .move-info {
   display: grid;
   align-content: center;
-  gap: var(--u);
+  gap: calc(var(--u) * 0.5);
   padding-left: var(--u3);
   border-left: var(--u) dashed var(--paper-edge);
-  font-size: var(--u6);
+  font-size: calc(var(--u) * 4.2);
+  line-height: 1.15;
+}
+.move-info__cooldown {
+  color: var(--fire-deep);
+  font-size: calc(var(--u) * 3.5);
 }
 
 /* animações dos sprites: o JS adiciona a classe e remove em animationend */
-.sprite.is-attacking-player { animation: lunge-right 0.35s steps(6) 1; }
-.sprite.is-attacking-enemy { animation: lunge-left 0.35s steps(6) 1; }
-.sprite.is-hit { animation: hit-blink 0.6s steps(1) 1; }
-.sprite.is-fainting { animation: faint 0.7s steps(8) forwards; }
+.sprite.is-attacking-player { animation: lunge-right 0.6s steps(8) 1; }
+.sprite.is-attacking-enemy { animation: lunge-left 0.6s steps(8) 1; }
+.sprite.is-hit { animation: hit-blink 0.65s steps(1) 1; }
+.sprite.is-fainting { animation: faint 0.8s steps(8) forwards; }
 .sprite--player.is-entering { animation: enter-from-left 0.8s steps(12) both; }
 .sprite--enemy.is-entering { animation: enter-from-right 0.8s steps(12) both; }
 

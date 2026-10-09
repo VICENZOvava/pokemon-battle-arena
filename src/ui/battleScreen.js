@@ -4,6 +4,7 @@ import { advanceRound, createBattle, performAttack } from '../battle/battle.js';
 import { calculateEffectiveness } from '../battle/typeChart.js';
 
 const $ = (selector, root) => root.querySelector(selector);
+const STRONG_MOVE_POWER = 80;
 const wait = (ms, signal) => new Promise((resolve) => {
   if (signal.aborted) return resolve();
   const timer = setTimeout(done, ms);
@@ -62,11 +63,16 @@ function renderMoveInfo(root, move, battle) {
   power.textContent = 'POT ' + move.power;
   const accuracy = document.createElement('span');
   accuracy.textContent = 'PREC ' + move.accuracy + '%';
+  const category = document.createElement('span');
+  category.textContent = move.category === 'physical' ? 'F\u00cdSICO' : move.category === 'special' ? 'ESPECIAL' : 'STATUS';
   const effectiveness = calculateEffectiveness(move.type, battle.enemy.types, battle.typeChart);
   const note = document.createElement('span');
   note.className = 'move-info__effect';
   note.textContent = effectiveness > 1 ? 'SUPER EFETIVO' : effectiveness === 0 ? 'SEM EFEITO' : effectiveness < 1 ? 'POUCO EFETIVO' : 'DANO NORMAL';
-  info.replaceChildren(type, power, accuracy, note);
+  const cooldown = document.createElement('span');
+  cooldown.className = 'move-info__cooldown';
+  cooldown.textContent = move.power >= STRONG_MOVE_POWER ? 'RECARGA: 2 TURNOS' : '';
+  info.replaceChildren(type, power, accuracy, category, note, cooldown);
 }
 
 export async function mountBattle(root, { playerId, difficulty, onExit, signal: ownerSignal }) {
@@ -80,6 +86,8 @@ export async function mountBattle(root, { playerId, difficulty, onExit, signal: 
   const fight = $('#btn-fight', root);
   let battle;
   let busy = false;
+  const cooldowns = new Map();
+  const buttonMoves = new Map();
   quit.hidden = false;
   fight.hidden = false;
   quit.addEventListener('click', onExit, { signal });
@@ -109,35 +117,66 @@ export async function mountBattle(root, { playerId, difficulty, onExit, signal: 
       const button = document.createElement('button');
       button.type = 'button';
       button.className = 'move-btn type--' + move.type;
-      button.textContent = move.name;
-      button.setAttribute('aria-label', move.name + ', tipo ' + typeText(move.type) + ', poder ' + move.power);
+      const name = document.createElement('span');
+      name.className = 'move-btn__name';
+      name.textContent = move.name;
+      const stats = document.createElement('span');
+      stats.className = 'move-btn__stats';
+      stats.textContent = 'POT ' + move.power + ' - PREC ' + move.accuracy + '%';
+      const cooldown = document.createElement('span');
+      cooldown.className = 'move-btn__cooldown';
+      button.append(name, stats, cooldown);
+      button.setAttribute('aria-label', move.name + ', tipo ' + typeText(move.type) + ', poder ' + move.power + ', precisao ' + move.accuracy + '%');
       button.addEventListener('focus', () => renderMoveInfo(root, move, battle), { signal });
       button.addEventListener('mouseenter', () => renderMoveInfo(root, move, battle), { signal });
       button.addEventListener('click', () => takeTurn(move), { signal });
+      buttonMoves.set(button, move);
       moveButtons.append(button);
     });
 
+    function refreshMoveButtons() {
+      buttonMoves.forEach((move, button) => {
+        const turns = cooldowns.get(move) || 0;
+        button.disabled = turns > 0;
+        button.querySelector('.move-btn__cooldown').textContent = turns
+          ? 'RECARGA ' + turns + (turns === 1 ? ' TURNO' : ' TURNOS')
+          : '';
+      });
+    }
+    function hasAvailableMove() {
+      return [...buttonMoves.keys()].some((button) => !button.disabled);
+    }
+    refreshMoveButtons();
+
     function actionMenu() {
       if (battle.over) return showResult(root, battle);
-      $('#battle-text', root).textContent = 'O que ' + battle.player.name + ' vai fazer?';
+      fight.textContent = hasAvailableMove() ? 'LUTAR' : 'AGUARDAR';
+      $('#battle-text', root).textContent = hasAvailableMove()
+        ? 'O que ' + battle.player.name + ' vai fazer?'
+        : 'Os golpes fortes estao recarregando.';
       setMode(root, 'actions');
     }
     async function executeMove(side, move) {
+      if (!move) {
+        $('#battle-text', root).textContent = battle.player.name + ' aguardou a recarga.';
+        return;
+      }
       const attacker = battle[side];
       const targetSide = side === 'player' ? 'enemy' : 'player';
       const attackerSprite = $('#' + side + '-sprite', root);
       const targetSprite = $('#' + targetSide + '-sprite', root);
       $('#battle-text', root).textContent = attacker.name + ' usou ' + move.name + '!';
-      await animate(attackerSprite, side === 'player' ? 'is-attacking-player' : 'is-attacking-enemy', 360, signal);
+      await animate(attackerSprite, side === 'player' ? 'is-attacking-player' : 'is-attacking-enemy', 600, signal);
       if (signal.aborted) return;
 
       const action = performAttack(battle, side, move);
       if (!action) return;
+      if (side === 'player' && move.power >= STRONG_MOVE_POWER) cooldowns.set(move, 3);
       if (action.missed) {
         $('#battle-text', root).textContent = attacker.name + ' errou o ataque!';
       } else {
         updateHealth(root, targetSide, action.defender);
-        if (action.damage > 0) await animate(targetSprite, 'is-hit', 420, signal);
+        if (action.damage > 0) await animate(targetSprite, 'is-hit', 650, signal);
         let message = action.damage > 0 ? 'Causou ' + action.damage + ' de dano.' : 'O golpe não causou dano.';
         if (action.effectiveness > 1) message += ' Foi super efetivo!';
         else if (action.effectiveness > 0 && action.effectiveness < 1) message += ' Não foi muito efetivo…';
@@ -146,15 +185,17 @@ export async function mountBattle(root, { playerId, difficulty, onExit, signal: 
         $('#battle-text', root).textContent = message;
       }
       if (battle.over) {
-        await animate(targetSprite, 'is-fainting', 650, signal);
+        await animate(targetSprite, 'is-fainting', 800, signal);
         $('#battle-text', root).textContent = battle[side === 'player' ? 'enemy' : 'player'].name + ' foi derrotado!';
-        await wait(450, signal);
+        await wait(650, signal);
       } else {
-        await wait(450, signal);
+        await wait(650, signal);
       }
     }
     async function takeTurn(playerMove) {
       if (busy || battle.over || signal.aborted) return;
+      if (playerMove && cooldowns.has(playerMove)) return;
+      if (!playerMove && hasAvailableMove()) return;
       busy = true;
       setMode(root, 'text');
       moveButtons.querySelectorAll('button').forEach((button) => { button.disabled = true; });
@@ -174,7 +215,11 @@ export async function mountBattle(root, { playerId, difficulty, onExit, signal: 
         if (battle.over) showResult(root, battle);
         else {
           advanceRound(battle);
-          moveButtons.querySelectorAll('button').forEach((button) => { button.disabled = false; });
+          cooldowns.forEach((turns, move) => {
+            if (turns <= 1) cooldowns.delete(move);
+            else cooldowns.set(move, turns - 1);
+          });
+          refreshMoveButtons();
           actionMenu();
         }
       }
@@ -183,17 +228,22 @@ export async function mountBattle(root, { playerId, difficulty, onExit, signal: 
 
     fight.addEventListener('click', () => {
       if (busy || battle.over) return;
+      if (!hasAvailableMove()) {
+        takeTurn(null);
+        return;
+      }
+      fight.textContent = 'LUTAR';
       setMode(root, 'moves');
-      const first = moveButtons.querySelector('button');
+      const first = [...buttonMoves.keys()].find((button) => !button.disabled);
       if (first) {
-        renderMoveInfo(root, battle.player.moves[0], battle);
+        renderMoveInfo(root, buttonMoves.get(first), battle);
         first.focus({ preventScroll: true });
       }
     }, { signal });
 
     $('#move-info', root).textContent = 'Escolha um golpe.';
     $('#battle-text', root).textContent = 'Um ' + battle.enemy.name + ' apareceu!';
-    await wait(450, signal);
+    await wait(800, signal);
     if (!signal.aborted) actionMenu();
   } catch (error) {
     if (!signal.aborted) {
