@@ -25,6 +25,7 @@
       <div class="pokeball pokeball--menu" aria-hidden="true"></div>
       <nav class="box menu" data-nav="vertical" aria-label="Menu principal">
         <button class="menu-item" type="button" data-action="play" data-hint="Escolha um Pokémon e enfrente o adversário."><span>NOVA BATALHA</span></button>
+        <button class="menu-item" type="button" data-action="tower" data-hint="Enfrente 10 andares seguidos usando apenas um Pokémon."><span>BATALHA DA TORRE</span></button>
         <button class="menu-item" type="button" data-action="difficulty" data-hint="Ajuste o comportamento da IA adversária."><span>DIFICULDADE</span><span class="menu-item__value" id="difficulty-label">NORMAL</span></button>
         <button class="menu-item" type="button" data-action="sound" data-hint="Ative ou silencie a música de batalha."><span>MÚSICA</span><span class="menu-item__value" id="sound-label">LIGADA</span></button>
         <button class="menu-item" type="button" data-goto="credits" data-hint="Veja os dados e recursos usados no projeto."><span>CRÉDITOS</span></button>
@@ -89,9 +90,13 @@
       <div class="result" id="battle-result" data-outcome="" hidden>
         <div class="box result__box">
           <h2 class="result__title" id="result-title">FIM DA BATALHA</h2>
+          <p class="result__message" id="result-message" aria-live="polite"></p>
           <div class="result__actions" data-nav="horizontal">
             <button class="btn btn--primary" type="button" id="btn-rematch" data-action="rematch">REVANCHE</button>
-            <button class="btn" type="button" data-goto="menu">MENU</button>
+            <button class="btn btn--primary" type="button" id="btn-tower-next" data-action="tower-next" hidden>PROXIMO ANDAR</button>
+            <button class="btn btn--primary" type="button" id="btn-tower-reset" data-action="tower-retry" hidden>REINICIAR TORRE</button>
+            <button class="btn" type="button" id="btn-tower-exit" data-action="tower-exit" hidden>SAIR DA TORRE</button>
+            <button class="btn" type="button" id="btn-result-menu" data-goto="menu">MENU</button>
           </div>
         </div>
       </div>

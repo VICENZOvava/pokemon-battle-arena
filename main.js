@@ -1,5 +1,6 @@
 import { mountSelection } from './src/ui/selection.js';
 import { mountBattle } from './src/ui/battleScreen.js';
+import { createTowerRoster, getTowerEnemyLevel, TOWER_FLOORS } from './src/battle/tower.js';
 
 const STORAGE_KEY = 'pba:settings:v1';
 const DIFFICULTIES = [
@@ -25,7 +26,7 @@ function loadSettings() {
   }
 }
 
-const state = { screen: 'title', playerId: null, settings: loadSettings() };
+const state = { screen: 'title', playerId: null, gameMode: 'classic', andar_atual: 1, towerOpponents: null, settings: loadSettings() };
 const screens = Object.fromEntries($$('.screen').map((screen) => [screen.dataset.screen, screen]));
 const controllers = { selection: null, battle: null };
 const music = $('#battle-music');
@@ -130,8 +131,20 @@ async function enterBattle() {
   try {
     const controller = await mountBattle(screens.battle, {
       playerId: state.playerId,
+      enemyId: state.gameMode === 'tower' ? state.towerOpponents[state.andar_atual - 1] : null,
+      enemyLevel: state.gameMode === 'tower' ? getTowerEnemyLevel(state.andar_atual) : 50,
+      mode: state.gameMode,
+      floor: state.andar_atual,
       difficulty: state.settings.difficulty,
-      onExit: () => go('menu'),
+      onExit: () => state.gameMode === 'tower' ? exitTower() : go('menu'),
+      onTowerResult(won) {
+        if (state.gameMode !== 'tower') return;
+        if (won) state.andar_atual += 1;
+        else {
+          state.andar_atual = 1;
+          state.towerOpponents = createTowerRoster(state.playerId, state.towerOpponents);
+        }
+      },
       signal: mountAbort.signal,
     });
     if (generation !== battleGeneration || state.screen !== 'battle') {
@@ -182,12 +195,50 @@ async function go(name, { force = false } = {}) {
   }
 }
 
+function startClassicSelection() {
+  state.gameMode = 'classic';
+  state.andar_atual = 1;
+  state.towerOpponents = null;
+  go('selection');
+}
+
+function startTower() {
+  state.gameMode = 'tower';
+  state.andar_atual = 1;
+  state.towerOpponents = null;
+  go('selection');
+}
+
 function startBattle() {
-  if (state.playerId != null) go('battle', { force: true });
+  if (state.playerId == null) return;
+  if (state.gameMode === 'tower' && !state.towerOpponents) {
+    state.towerOpponents = createTowerRoster(state.playerId);
+  }
+  go('battle', { force: true });
+}
+
+function retryTower() {
+  if (state.gameMode !== 'tower' || state.playerId == null) return;
+  if (state.andar_atual > TOWER_FLOORS || !state.towerOpponents) {
+    state.towerOpponents = createTowerRoster(state.playerId, state.towerOpponents);
+  }
+  state.andar_atual = 1;
+  startBattle();
+}
+
+function exitTower() {
+  state.gameMode = 'classic';
+  state.andar_atual = 1;
+  state.towerOpponents = null;
+  go('menu');
 }
 
 const actions = {
-  play: () => go('selection'),
+  play: startClassicSelection,
+  tower: startTower,
+  'tower-next': startBattle,
+  'tower-retry': retryTower,
+  'tower-exit': exitTower,
   difficulty() {
     const current = DIFFICULTIES.findIndex((item) => item.id === state.settings.difficulty);
     state.settings.difficulty = DIFFICULTIES[(current + 1) % DIFFICULTIES.length].id;

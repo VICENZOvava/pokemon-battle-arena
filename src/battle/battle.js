@@ -24,11 +24,11 @@ function preparePokemon(pokemon, level) {
   };
 }
 
-export function createBattle(playerPokemon, enemyPokemon, typeChart = TYPE_CHART, { level = 50 } = {}) {
+export function createBattle(playerPokemon, enemyPokemon, typeChart = TYPE_CHART, { level = 50, enemyLevel = level } = {}) {
   if (!playerPokemon || !enemyPokemon) throw new Error('Escolha os dois Pokémon para iniciar a batalha.');
   return {
     player: preparePokemon(playerPokemon, level),
-    enemy: preparePokemon(enemyPokemon, level),
+    enemy: preparePokemon(enemyPokemon, enemyLevel),
     typeChart, round: 1, over: false, winner: null, history: [],
   };
 }

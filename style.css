@@ -756,6 +756,7 @@ noscript { color: #fff; font-size: 12px; }
   display: grid;
   gap: var(--u6);
   justify-items: center;
+  max-width: calc(var(--u) * 228);
   padding: var(--u8) var(--u12);
   text-align: center;
 }
@@ -763,7 +764,12 @@ noscript { color: #fff; font-size: 12px; }
 .result__title { font-size: var(--u10); }
 .result[data-outcome="win"] .result__title { color: #1f8a49; }
 .result[data-outcome="lose"] .result__title { color: var(--fire); }
-.result__actions { display: flex; gap: var(--u4); }
+.result__message {
+  max-width: calc(var(--u) * 190);
+  font-size: var(--u5);
+  line-height: 1.7;
+}
+.result__actions { display: flex; flex-wrap: wrap; justify-content: center; gap: var(--u3); }
 
 /* ------------------------------------------------------- transição de tela */
 

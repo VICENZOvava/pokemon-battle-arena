@@ -2,6 +2,7 @@ import { getPokemon, getRandomOpponent, getSpriteUrl, getTypeChart, TYPE_LABELS 
 import { chooseMove } from '../battle/ai.js';
 import { advanceRound, createBattle, performAttack } from '../battle/battle.js';
 import { calculateEffectiveness } from '../battle/typeChart.js';
+import { TOWER_FLOORS } from '../battle/tower.js';
 
 const $ = (selector, root) => root.querySelector(selector);
 const STRONG_MOVE_POWER = 80;
@@ -47,12 +48,50 @@ function animate(element, className, duration, signal) {
 function typeText(type) {
   return TYPE_LABELS[type] || type;
 }
-function showResult(root, battle) {
+function showResult(root, battle, { mode = 'classic', floor = 1, onTowerResult } = {}) {
   const result = $('#battle-result', root);
-  result.dataset.outcome = battle.winner === 'player' ? 'win' : 'lose';
-  $('#result-title', root).textContent = battle.winner === 'player' ? 'VITÓRIA!' : 'DERROTA!';
+  const won = battle.winner === 'player';
+  const title = $('#result-title', root);
+  const message = $('#result-message', root);
+  const rematch = $('#btn-rematch', root);
+  const next = $('#btn-tower-next', root);
+  const reset = $('#btn-tower-reset', root);
+  const exit = $('#btn-tower-exit', root);
+  const menu = $('#btn-result-menu', root);
+  result.dataset.outcome = won ? 'win' : 'lose';
   result.hidden = false;
-  $('#btn-rematch', root).focus({ preventScroll: true });
+  [rematch, next, reset, exit, menu].forEach((button) => { button.hidden = true; });
+
+  if (mode !== 'tower') {
+    title.textContent = won ? 'VITÓRIA!' : 'DERROTA!';
+    message.textContent = won ? 'Você venceu a batalha!' : 'Você perdeu a batalha. Tente novamente!';
+    rematch.hidden = false;
+    menu.hidden = false;
+    rematch.focus({ preventScroll: true });
+    return;
+  }
+
+  onTowerResult?.(won, floor);
+  exit.hidden = false;
+  if (won && floor < TOWER_FLOORS) {
+    title.textContent = 'ANDAR ' + floor + ' CONQUISTADO!';
+    message.textContent = 'Sucesso! andar_atual agora é ' + (floor + 1) + '. Prepare-se para o próximo adversário.';
+    next.textContent = 'PRÓXIMO ANDAR';
+    next.hidden = false;
+    next.focus({ preventScroll: true });
+  } else if (won) {
+    title.textContent = 'TORRE CONCLUÍDA!';
+    message.textContent = 'Sucesso! Você venceu os 10 andares da torre.';
+    reset.textContent = 'NOVA TORRE';
+    reset.hidden = false;
+    reset.focus({ preventScroll: true });
+  } else {
+    title.textContent = 'TORRE REINICIADA';
+    message.textContent = 'Você perdeu no andar ' + floor + '. O progresso voltou ao andar 1 e todos os adversários foram sorteados novamente.';
+    reset.textContent = 'REINICIAR TORRE';
+    reset.hidden = false;
+    reset.focus({ preventScroll: true });
+  }
 }
 function renderMoveInfo(root, move, battle) {
   const info = $('#move-info', root);
@@ -75,7 +114,7 @@ function renderMoveInfo(root, move, battle) {
   info.replaceChildren(type, power, accuracy, category, note, cooldown);
 }
 
-export async function mountBattle(root, { playerId, difficulty, onExit, signal: ownerSignal }) {
+export async function mountBattle(root, { playerId, enemyId = null, enemyLevel = 50, mode = 'classic', floor = 1, difficulty, onExit, onTowerResult, signal: ownerSignal }) {
   const abort = new AbortController();
   const cancel = () => abort.abort();
   if (ownerSignal?.aborted) cancel();
@@ -86,7 +125,7 @@ export async function mountBattle(root, { playerId, difficulty, onExit, signal: 
   const fight = $('#btn-fight', root);
   let battle;
   let busy = false;
-  const cooldowns = new Map();
+  const cooldowns = { player: new Map(), enemy: new Map() };
   const buttonMoves = new Map();
   quit.hidden = false;
   fight.hidden = false;
@@ -94,14 +133,16 @@ export async function mountBattle(root, { playerId, difficulty, onExit, signal: 
 
   try {
     const [playerData, enemyData, chart] = await Promise.all([
-      getPokemon(playerId), getRandomOpponent(playerId), getTypeChart(),
+      getPokemon(playerId),
+      mode === 'tower' && enemyId ? getPokemon(enemyId) : getRandomOpponent(playerId),
+      getTypeChart(),
     ]);
     if (signal.aborted) return controllerHandle;
-    battle = createBattle(playerData, enemyData, chart, { level: 50 });
+    battle = createBattle(playerData, enemyData, chart, { level: 50, enemyLevel });
     $('#player-name', root).textContent = battle.player.name;
     $('#enemy-name', root).textContent = battle.enemy.name;
     $('#player-level', root).textContent = '50';
-    $('#enemy-level', root).textContent = '50';
+    $('#enemy-level', root).textContent = String(battle.enemy.level);
     setSprite(root, 'player', battle.player);
     setSprite(root, 'enemy', battle.enemy);
     updateHealth(root, 'player', battle.player);
@@ -136,7 +177,7 @@ export async function mountBattle(root, { playerId, difficulty, onExit, signal: 
 
     function refreshMoveButtons() {
       buttonMoves.forEach((move, button) => {
-        const turns = cooldowns.get(move) || 0;
+        const turns = cooldowns.player.get(move) || 0;
         button.disabled = turns > 0;
         button.querySelector('.move-btn__cooldown').textContent = turns
           ? 'RECARGA ' + turns + (turns === 1 ? ' TURNO' : ' TURNOS')
@@ -149,16 +190,18 @@ export async function mountBattle(root, { playerId, difficulty, onExit, signal: 
     refreshMoveButtons();
 
     function actionMenu() {
-      if (battle.over) return showResult(root, battle);
+      if (battle.over) return showResult(root, battle, { mode, floor, onTowerResult });
       fight.textContent = hasAvailableMove() ? 'LUTAR' : 'AGUARDAR';
-      $('#battle-text', root).textContent = hasAvailableMove()
-        ? 'O que ' + battle.player.name + ' vai fazer?'
-        : 'Os golpes fortes estao recarregando.';
+      $('#battle-text', root).textContent = mode === 'tower'
+        ? 'ANDAR ' + floor + '/' + TOWER_FLOORS + ' - O que ' + battle.player.name + ' vai fazer?'
+        : hasAvailableMove()
+          ? 'O que ' + battle.player.name + ' vai fazer?'
+          : 'Os golpes fortes estao recarregando.';
       setMode(root, 'actions');
     }
     async function executeMove(side, move) {
       if (!move) {
-        $('#battle-text', root).textContent = battle.player.name + ' aguardou a recarga.';
+        $('#battle-text', root).textContent = battle[side].name + ' aguardou a recarga.';
         return;
       }
       const attacker = battle[side];
@@ -171,7 +214,7 @@ export async function mountBattle(root, { playerId, difficulty, onExit, signal: 
 
       const action = performAttack(battle, side, move);
       if (!action) return;
-      if (side === 'player' && move.power >= STRONG_MOVE_POWER) cooldowns.set(move, 3);
+      if (move.power >= STRONG_MOVE_POWER) cooldowns[side].set(move, 3);
       if (action.missed) {
         $('#battle-text', root).textContent = attacker.name + ' errou o ataque!';
       } else {
@@ -184,6 +227,9 @@ export async function mountBattle(root, { playerId, difficulty, onExit, signal: 
         if (action.critical) message += ' Acerto crítico!';
         $('#battle-text', root).textContent = message;
       }
+      if (side === 'enemy' && move.power >= STRONG_MOVE_POWER) {
+        $('#battle-text', root).textContent += ' Golpe forte em recarga por 2 turnos.';
+      }
       if (battle.over) {
         await animate(targetSprite, 'is-fainting', 900, signal);
         $('#battle-text', root).textContent = battle[side === 'player' ? 'enemy' : 'player'].name + ' foi derrotado!';
@@ -194,15 +240,16 @@ export async function mountBattle(root, { playerId, difficulty, onExit, signal: 
     }
     async function takeTurn(playerMove) {
       if (busy || battle.over || signal.aborted) return;
-      if (playerMove && cooldowns.has(playerMove)) return;
+      if (playerMove && cooldowns.player.has(playerMove)) return;
       if (!playerMove && hasAvailableMove()) return;
       busy = true;
       setMode(root, 'text');
       moveButtons.querySelectorAll('button').forEach((button) => { button.disabled = true; });
       const enemyMove = chooseMove({
-        moves: battle.enemy.moves, attacker: battle.enemy, defender: battle.player,
+        moves: battle.enemy.moves.filter((move) => !cooldowns.enemy.has(move)),
+        attacker: battle.enemy, defender: battle.player,
         difficulty, typeChart: battle.typeChart,
-      }) || battle.enemy.moves[0];
+      });
       const order = battle.player.speed === battle.enemy.speed
         ? (Math.random() < 0.5 ? ['player', 'enemy'] : ['enemy', 'player'])
         : battle.player.speed > battle.enemy.speed ? ['player', 'enemy'] : ['enemy', 'player'];
@@ -212,12 +259,14 @@ export async function mountBattle(root, { playerId, difficulty, onExit, signal: 
         await executeMove(side, choices[side]);
       }
       if (!signal.aborted) {
-        if (battle.over) showResult(root, battle);
+        if (battle.over) showResult(root, battle, { mode, floor, onTowerResult });
         else {
           advanceRound(battle);
-          cooldowns.forEach((turns, move) => {
-            if (turns <= 1) cooldowns.delete(move);
-            else cooldowns.set(move, turns - 1);
+          Object.values(cooldowns).forEach((sideCooldowns) => {
+            sideCooldowns.forEach((turns, move) => {
+              if (turns <= 1) sideCooldowns.delete(move);
+              else sideCooldowns.set(move, turns - 1);
+            });
           });
           refreshMoveButtons();
           actionMenu();
@@ -242,7 +291,7 @@ export async function mountBattle(root, { playerId, difficulty, onExit, signal: 
     }, { signal });
 
     $('#move-info', root).textContent = 'Escolha um golpe.';
-    $('#battle-text', root).textContent = 'Um ' + battle.enemy.name + ' apareceu!';
+    $('#battle-text', root).textContent = mode === 'tower' ? 'ANDAR ' + floor + '/' + TOWER_FLOORS + ': ' + battle.enemy.name + ' apareceu!' : 'Um ' + battle.enemy.name + ' apareceu!';
     await wait(800, signal);
     if (!signal.aborted) actionMenu();
   } catch (error) {
