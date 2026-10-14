@@ -15,6 +15,7 @@ Clique em **APERTE START** para liberar a música, escolha um Pokémon e selecio
 - Tipos, efetividade, dano, precisão, STAB, crítico e ordem por velocidade.
 - IA com dificuldades fácil, normal e difícil.
 - Preferências de música e dificuldade salvas no navegador.
+- Modo batalha de torre (1 a 10) disponivel.
 - Música em loop carregada de assets/audio.
 
 O catálogo usa a PokéAPI e sprites públicos do projeto PokeAPI. Sem conexão, a seleção local continua jogável; sprites remotos podem não aparecer.
