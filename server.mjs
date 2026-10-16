@@ -3,12 +3,16 @@ import { readFile, stat } from 'node:fs/promises';
 import { dirname, extname, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
+import { Redis as UpstashRedis } from '@upstash/redis';
+import IORedis from 'ioredis';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { calculateDamage } from './src/battle/damage.js';
 import { TYPE_CHART } from './src/battle/typeChart.js';
 
 const ROOT = dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT) || 3000;
+let redisClient;
+let redisClientKind;
 const ROOM_TTL = 2 * 60 * 60 * 1000;
 const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 const require = createRequire(import.meta.url);
@@ -319,6 +323,176 @@ export async function handleApi(request, response, url) {
   }
   return sendJson(response, 405, { error: 'Método não permitido.' });
 }
+const ROOM_TTL_SECONDS = ROOM_TTL / 1000;
+const ROOM_LOCK_TTL_SECONDS = 20;
+const RELEASE_ROOM_LOCK_SCRIPT = [
+  "if redis.call('GET', KEYS[1]) == ARGV[1] then",
+  "  return redis.call('DEL', KEYS[1])",
+  "end",
+  "return 0",
+].join('\n');
+
+function getRoomStore() {
+  if (process.env.REDIS_URL) {
+    redisClientKind = 'native';
+    redisClient ??= new IORedis(process.env.REDIS_URL, {
+      lazyConnect: true,
+      maxRetriesPerRequest: 1,
+    });
+    return redisClient;
+  }
+
+  const url = process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL;
+  const token = process.env.UPSTASH_REDIS_REST_TOKEN || process.env.KV_REST_API_TOKEN;
+  if (!url || !token) return null;
+
+  redisClientKind = 'upstash';
+  redisClient ??= new UpstashRedis({ url, token });
+  return redisClient;
+}
+
+function isPvpStorageRoute(request, url) {
+  return (url.pathname === '/api/pvp/rooms' && request.method === 'POST')
+    || /^\/api\/pvp\/rooms\/([A-Z0-9]{6})(?:\/(join|team|action|leave|state))?$/i.test(url.pathname);
+}
+
+function createCapturedResponse() {
+  return {
+    statusCode: 200,
+    headers: {},
+    body: '',
+    writeHead(statusCode, headers = {}) {
+      this.statusCode = statusCode;
+      this.headers = headers;
+      return this;
+    },
+    end(body = '') {
+      this.body = typeof body === 'string' ? body : String(body);
+    },
+  };
+}
+
+async function invokeCapturedApi(request, url) {
+  const captured = createCapturedResponse();
+  try {
+    await handleApi(request, captured, url);
+  } catch (error) {
+    sendJson(captured, error.status || 500, {
+      error: error.status ? error.message : 'Erro interno do servidor.',
+    });
+  }
+  return captured;
+}
+
+function forwardCapturedResponse(captured, response) {
+  response.writeHead(captured.statusCode, captured.headers);
+  response.end(captured.body);
+}
+
+async function roomStoreGet(redis, key) {
+  const value = await redis.get(key);
+  if (redisClientKind === 'native' && typeof value === 'string') return JSON.parse(value);
+  return value;
+}
+
+async function roomStoreSet(redis, key, value, { ex, nx = false }) {
+  if (redisClientKind === 'native') {
+    const serialized = typeof value === 'string' ? value : JSON.stringify(value);
+    const args = ['EX', ex];
+    if (nx) args.push('NX');
+    return redis.set(key, serialized, ...args);
+  }
+  return redis.set(key, value, { ex, ...(nx ? { nx: true } : {}) });
+}
+
+async function roomStoreEval(redis, script, key, token) {
+  if (redisClientKind === 'native') return redis.eval(script, 1, key, token);
+  return redis.eval(script, [key], [token]);
+}
+
+async function createPersistentRoom(request, response, url, redis) {
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    const captured = await invokeCapturedApi(request, url);
+    if (captured.statusCode !== 201) {
+      forwardCapturedResponse(captured, response);
+      return;
+    }
+
+    const { roomCode } = JSON.parse(captured.body);
+    const room = rooms.get(roomCode);
+    let stored;
+    try {
+      if (room) {
+        stored = await roomStoreSet(redis, 'pvp:room:' + roomCode, room, {
+          ex: ROOM_TTL_SECONDS,
+          nx: true,
+        });
+      }
+    } finally {
+      rooms.delete(roomCode);
+    }
+
+    if (stored === 'OK') {
+      forwardCapturedResponse(captured, response);
+      return;
+    }
+  }
+
+  sendJson(response, 503, { error: 'Nao foi possivel criar uma sala agora. Tente novamente.' });
+}
+
+async function acquireRoomLock(redis, roomCode) {
+  const key = 'pvp:lock:' + roomCode;
+  const token = randomUUID();
+
+  for (let attempt = 0; attempt < 30; attempt += 1) {
+    const result = await roomStoreSet(redis, key, token, {
+      nx: true,
+      ex: ROOM_LOCK_TTL_SECONDS,
+    });
+    if (result === 'OK') return { key, token };
+    await new Promise((resolve) => setTimeout(resolve, 40));
+  }
+  return null;
+}
+
+async function withPersistentRoom(request, response, url, roomCode, redis) {
+  const lock = await acquireRoomLock(redis, roomCode);
+  if (!lock) {
+    sendJson(response, 503, { error: 'A sala esta ocupada. Tente novamente.' });
+    return;
+  }
+
+  const roomKey = 'pvp:room:' + roomCode;
+  try {
+    const room = await roomStoreGet(redis, roomKey);
+    if (room) rooms.set(roomCode, room);
+    else rooms.delete(roomCode);
+
+    const captured = await invokeCapturedApi(request, url);
+    const updatedRoom = rooms.get(roomCode);
+    if (updatedRoom) {
+      await roomStoreSet(redis, roomKey, updatedRoom, { ex: ROOM_TTL_SECONDS });
+    }
+    forwardCapturedResponse(captured, response);
+  } finally {
+    rooms.delete(roomCode);
+    try {
+      await roomStoreEval(redis, RELEASE_ROOM_LOCK_SCRIPT, lock.key, lock.token);
+    } catch (error) {
+      console.error('Falha ao liberar bloqueio da sala PvP:', error);
+    }
+  }
+}
+
+async function handlePersistentPvp(request, response, url, redis) {
+  const isCreate = url.pathname === '/api/pvp/rooms' && request.method === 'POST';
+  const match = url.pathname.match(
+    /^\/api\/pvp\/rooms\/([A-Z0-9]{6})(?:\/(join|team|action|leave|state))?$/i,
+  );
+  if (isCreate) return createPersistentRoom(request, response, url, redis);
+  return withPersistentRoom(request, response, url, match[1].toUpperCase(), redis);
+}
 const MIME = {
   '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8',
   '.js': 'text/javascript; charset=utf-8', '.mjs': 'text/javascript; charset=utf-8',
@@ -351,11 +525,28 @@ async function serveStatic(request, response, url) {
   }
 }
 const server = createServer(async (request, response) => {
-  const url = new URL(request.url || '/', `http://${request.headers.host || 'localhost'}`);
+  const url = new URL(request.url || '/', 'http://' + (request.headers.host || 'localhost'));
   for (const [code, room] of rooms) if (Date.now() - Math.max(...room.lastSeen) > ROOM_TTL) rooms.delete(code);
+  if (url.pathname === '/healthz') {
+    sendJson(response, 200, { status: 'ok' });
+    return;
+  }
   if (url.pathname.startsWith('/api/')) {
-    try { await handleApi(request, response, url); }
-    catch (error) { sendJson(response, error.status || 500, { error: error.status ? error.message : 'Erro interno do servidor.' }); }
+    const pvpRoute = isPvpStorageRoute(request, url);
+    try {
+      const store = pvpRoute ? getRoomStore() : null;
+      if (store) await handlePersistentPvp(request, response, url, store);
+      else await handleApi(request, response, url);
+    } catch (error) {
+      console.error('Falha ao processar requisicao da API:', error);
+      const status = error.status || (pvpRoute ? 503 : 500);
+      const message = error.status
+        ? error.message
+        : pvpRoute
+          ? 'Nao foi possivel acessar as salas PvP agora. Tente novamente.'
+          : 'Erro interno do servidor.';
+      sendJson(response, status, { error: message });
+    }
     return;
   }
   await serveStatic(request, response, url);

@@ -22,18 +22,17 @@ O catálogo usa a PokéAPI e sprites públicos do projeto PokeAPI. Sem conexão,
 
 No menu, escolha **PVP ONLINE 6X6**. Um jogador cria a sala e compartilha o código; o outro entra com esse código. Cada um seleciona seis Pokémon diferentes da primeira geração. Em cada turno, quem tem mais vida no Pokémon ativo escolhe primeiro; se a vida empatar, a ordem é aleatória. O turno só é resolvido depois que os dois jogadores escolhem. Trocas consomem a ação e, quando um Pokémon desmaia, seu treinador escolhe um substituto.
 
-## Publicar na Vercel
+## Publicar no Render
 
-O projeto publica a interface como arquivos estáticos e usa uma Vercel Function para as rotas do PvP.
+O servidor Node serve a interface e as rotas PvP. O arquivo render.yaml configura um Web Service, a verificação de saúde em /healthz e um Render Key Value para manter as salas PvP salvas entre reinícios.
 
-A função aceita os nomes Upstash `UPSTASH_REDIS_REST_URL`/`UPSTASH_REDIS_REST_TOKEN` e os nomes compatíveis do Vercel KV `KV_REST_API_URL`/`KV_REST_API_TOKEN`.
+1. No Render, crie ou sincronize um Blueprint apontando para este repositório e para a branch publicada.
+2. Confirme que o Web Service corresponde ao projeto atual e que o recurso Key Value pokemon-battle-arena-rooms será criado ou conectado.
+3. O Blueprint configura npm install como build, npm start como comando inicial e liga o Redis por REDIS_URL.
 
-1. Envie o projeto para um repositório GitHub e importe esse repositório em **vercel.com/new**. Deixe o diretório raiz como `.`.
-2. A configuração do projeto já define o comando de build (`npm run build`) e a pasta publicada (`dist`).
-3. No painel da Vercel, conecte um banco **Upstash Redis** pelo Marketplace. O PvP usa as variáveis `UPSTASH_REDIS_REST_URL` e `UPSTASH_REDIS_REST_TOKEN`; confirme que elas estão disponíveis no ambiente **Production** (e também em Preview/Development, se for usar esses ambientes).
-4. Faça o deploy. Após conectar ou alterar as variáveis do Redis, gere um novo deploy para que a função receba as configurações.
+Se o Web Service já foi criado manualmente, sincronize o Blueprint para conectar o Key Value. Também é possível criar o Key Value no painel e definir REDIS_URL nas variáveis do Web Service usando a URL interna do Redis. O app e o Key Value precisam estar na mesma região.
 
-Sem o Redis configurado, o site e as batalhas locais continuam disponíveis, mas as salas PvP online retornam uma mensagem de configuração necessária. As salas online expiram após duas horas sem atividade.
+Sem Redis, as salas ficam apenas na memória do processo e se perdem quando o servidor reinicia. Com Redis conectado, elas ficam salvas por até duas horas após a última atividade. O Render pode suspender serviços gratuitos sem tráfego; o primeiro acesso depois da suspensão pode demorar enquanto o serviço inicia.
 
 ## Executar o servidor local
 

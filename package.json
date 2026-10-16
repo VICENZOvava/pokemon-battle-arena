@@ -8,6 +8,7 @@
     "start": "node server.mjs"
   },
   "dependencies": {
-    "@upstash/redis": "^1.39.0"
+    "@upstash/redis": "^1.39.0",
+    "ioredis": "^5.0.0"
   }
 }

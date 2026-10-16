@@ -1,0 +1,20 @@
+services:
+  - type: web
+    name: pokemon-battle-arena-f557
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /healthz
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: REDIS_URL
+        fromService:
+          type: keyvalue
+          name: pokemon-battle-arena-rooms
+          property: connectionString
+
+  - type: keyvalue
+    name: pokemon-battle-arena-rooms
+    plan: free
