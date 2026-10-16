@@ -26,6 +26,8 @@ No menu, escolha **PVP ONLINE 6X6**. Um jogador cria a sala e compartilha o cód
 
 O projeto publica a interface como arquivos estáticos e usa uma Vercel Function para as rotas do PvP.
 
+A função aceita os nomes Upstash `UPSTASH_REDIS_REST_URL`/`UPSTASH_REDIS_REST_TOKEN` e os nomes compatíveis do Vercel KV `KV_REST_API_URL`/`KV_REST_API_TOKEN`.
+
 1. Envie o projeto para um repositório GitHub e importe esse repositório em **vercel.com/new**. Deixe o diretório raiz como `.`.
 2. A configuração do projeto já define o comando de build (`npm run build`) e a pasta publicada (`dist`).
 3. No painel da Vercel, conecte um banco **Upstash Redis** pelo Marketplace. O PvP usa as variáveis `UPSTASH_REDIS_REST_URL` e `UPSTASH_REDIS_REST_TOKEN`; confirme que elas estão disponíveis no ambiente **Production** (e também em Preview/Development, se for usar esses ambientes).
