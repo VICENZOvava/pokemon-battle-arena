@@ -646,8 +646,9 @@ noscript { color: #fff; font-size: 12px; }
   min-width: 0;
   min-height: 0;
 }
-.battle__dialog[data-pvp="true"] .battle__moves { grid-template-columns: minmax(0, 1fr); }
-.battle__dialog[data-pvp="true"] .move-info { display: none; }
+.battle__dialog[data-pvp="true"] .battle__moves { grid-template-columns: minmax(0, 1fr) minmax(0, calc(var(--u) * 62)); }
+.battle__dialog[data-pvp="true"][data-mode="moves"] .battle__moves { grid-row: 1 / -1; }
+.battle__dialog[data-pvp="true"] .move-info { display: grid; gap: calc(var(--u) * 0.5); padding-left: var(--u2); font-size: calc(var(--u) * 3.4); }
 .battle__dialog[data-pvp="true"] .move-btn {
   padding-top: 0;
   padding-bottom: 0;

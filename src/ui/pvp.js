@@ -1,4 +1,5 @@
-import { getCatalog, getSpriteUrl } from '../api/pokemonService.js';
+import { getCatalog, getSpriteUrl, refreshCatalog, TYPE_LABELS } from '../api/pokemonService.js';
+import { calculateEffectiveness, TYPE_CHART } from '../battle/typeChart.js';
 import { createPvpRoom, getPvpState, joinPvpRoom, setPvpTeam, submitPvpAction } from '../api/pvpClient.js';
 
 const $ = (selector, root) => root.querySelector(selector);
@@ -98,7 +99,7 @@ export async function mountPvpTeam(root, { session, onBattle, signal: ownerSigna
       tile.className = 'poke-tile';
       tile.dataset.id = String(pokemon.id);
       tile.dataset.name = pokemon.name;
-      tile.setAttribute('aria-pressed', 'false');
+      tile.setAttribute('aria-pressed', String(selected.includes(Number(pokemon.id))));
       const art = document.createElement('span');
       art.className = 'poke-tile__art';
       art.setAttribute('aria-hidden', 'true');
@@ -175,6 +176,25 @@ export async function mountPvpTeam(root, { session, onBattle, signal: ownerSigna
       }
     } catch (error) {
       if (!signal.aborted) {
+        try {
+          const latest = await getPvpState(session, signal);
+          if (signal.aborted) return;
+          const mine = latest.players[session.seat];
+          if (latest.phase === 'battle') {
+            transitioned = true;
+            onBattle();
+            return;
+          }
+          if (mine?.ready) {
+            locked = true;
+            submissionError = '';
+            message.textContent = 'Equipe confirmada. Aguardando o adversário…';
+            renderParty();
+            return;
+          }
+        } catch {
+          // Mantém abaixo a mensagem original quando não dá para reconciliar com o servidor.
+        }
         locked = false;
         submissionError = error.message;
         renderParty();
@@ -186,9 +206,21 @@ export async function mountPvpTeam(root, { session, onBattle, signal: ownerSigna
     }
   }, { signal });
   try {
-    renderCatalog(await getCatalog());
+    const initialCatalog = await getCatalog();
+    renderCatalog(initialCatalog);
     renderParty();
-    if (!signal.aborted) poll();
+    if (!signal.aborted) {
+      refreshCatalog().then((updatedCatalog) => {
+        if (signal.aborted) return;
+        const changed = updatedCatalog.length !== initialCatalog.length
+          || updatedCatalog.some((pokemon, index) => pokemon.name !== initialCatalog[index]?.name);
+        if (changed) {
+          renderCatalog(updatedCatalog);
+          renderParty();
+        }
+      });
+      poll();
+    }
   } catch (error) {
     message.textContent = error.message;
   }
@@ -283,7 +315,33 @@ function renderReplaySnapshot(root, state, snapshot, session, loadedSprites) {
     updateHealth(root, side, pokemon);
   }
 }
-function makeChoiceButton(text, detail, onClick, type = 'normal') {
+function renderPvpMoveInfo(root, move, snapshot, session) {
+  const info = $('#move-info', root);
+  if (!move) {
+    info.replaceChildren();
+    return;
+  }
+  const type = document.createElement('span');
+  type.className = 'type-badge type--' + move.type;
+  type.textContent = TYPE_LABELS[move.type] || move.type;
+  const power = document.createElement('span');
+  power.textContent = 'POT ' + move.power;
+  const accuracy = document.createElement('span');
+  accuracy.textContent = 'PREC ' + move.accuracy + '%';
+  const category = document.createElement('span');
+  category.textContent = move.category === 'physical' ? 'FÍSICO'
+    : move.category === 'special' ? 'ESPECIAL' : 'STATUS';
+  const opponent = snapshot?.players?.[1 - session.seat];
+  const defender = opponent?.team?.[opponent.activeIndex];
+  const effectiveness = calculateEffectiveness(move.type, defender?.types || [], TYPE_CHART);
+  const note = document.createElement('span');
+  note.className = 'move-info__effect';
+  note.textContent = effectiveness > 1 ? 'SUPER EFETIVO'
+    : effectiveness === 0 ? 'SEM EFEITO'
+      : effectiveness < 1 ? 'POUCO EFETIVO' : 'DANO NORMAL';
+  info.replaceChildren(type, power, accuracy, category, note);
+}
+function makeChoiceButton(text, detail, onClick, type = 'normal', onPreview = null) {
   const button = document.createElement('button');
   button.type = 'button';
   button.className = 'move-btn type--' + type;
@@ -295,6 +353,10 @@ function makeChoiceButton(text, detail, onClick, type = 'normal') {
   stats.textContent = detail;
   button.append(name, stats);
   button.addEventListener('click', onClick);
+  if (onPreview) {
+    button.addEventListener('focus', onPreview);
+    button.addEventListener('mouseenter', onPreview);
+  }
   return button;
 }
 export function mountPvpBattle(root, { session, onExit, signal: ownerSignal }) {
@@ -330,9 +392,19 @@ export function mountPvpBattle(root, { session, onExit, signal: ownerSignal }) {
     if (!active) return;
     choices.replaceChildren();
     active.moves.forEach((move, index) => {
-      choices.append(makeChoiceButton(move.name, 'POT ' + move.power + ' · PREC ' + move.accuracy + '%', () => send({ type: 'move', index }), move.type));
+      const preview = () => renderPvpMoveInfo(root, move, currentSnapshot, session);
+      choices.append(makeChoiceButton(
+        move.name,
+        'POT ' + move.power + ' · PREC ' + move.accuracy + '%',
+        () => send({ type: 'move', index }),
+        move.type,
+        preview,
+      ));
     });
     dialog.dataset.mode = 'moves';
+    const firstMove = active.moves[0];
+    if (firstMove) renderPvpMoveInfo(root, firstMove, currentSnapshot, session);
+    choices.querySelector('button')?.focus({ preventScroll: true });
   }, { signal });
   switchButton.addEventListener('click', () => {
     if (ended || sending || polling) return;
@@ -342,8 +414,15 @@ export function mountPvpBattle(root, { session, onExit, signal: ownerSignal }) {
     choices.replaceChildren();
     mine.team.forEach((pokemon, index) => {
       if (index === mine.activeIndex || pokemon.hp <= 0) return;
-      choices.append(makeChoiceButton(pokemon.name, 'HP ' + pokemon.hp + '/' + pokemon.hpMax + ' · TROCAR', () => send({ type: 'switch', index }), pokemon.types[0] || 'normal'));
+      choices.append(makeChoiceButton(
+        pokemon.name,
+        'HP ' + pokemon.hp + '/' + pokemon.hpMax + ' · TROCAR',
+        () => send({ type: 'switch', index }),
+        pokemon.types[0] || 'normal',
+      ));
     });
+    const info = $('#move-info', root);
+    info.textContent = 'A troca substitui o ataque neste turno.';
     dialog.dataset.mode = 'moves';
   }, { signal });
   async function send(action) {

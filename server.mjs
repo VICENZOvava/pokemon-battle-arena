@@ -8,6 +8,7 @@ import IORedis from 'ioredis';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { calculateDamage } from './src/battle/damage.js';
 import { TYPE_CHART } from './src/battle/typeChart.js';
+import { FIRST_GEN_NAMES } from './src/api/pokemonService.js';
 
 const ROOT = dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT) || 3000;
@@ -19,6 +20,70 @@ const require = createRequire(import.meta.url);
 const pokemonSeed = require('./data/pokemon.json');
 const moveBook = require('./data/moves.json');
 const pokemonById = new Map(pokemonSeed.map((pokemon) => [pokemon.id, pokemon]));
+const pokemonRequests = new Map();
+const POKEAPI = 'https://pokeapi.co/api/v2/pokemon/';
+function titleCase(value) {
+  return String(value || '').split('-')
+    .map((part) => part ? part[0].toUpperCase() + part.slice(1) : '')
+    .join(' ');
+}
+function getPokemonData(id) {
+  if (pokemonById.has(id)) return Promise.resolve(pokemonById.get(id));
+  if (pokemonRequests.has(id)) return pokemonRequests.get(id);
+  const request = (async () => {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 2500);
+    try {
+      const response = await fetch(POKEAPI + id, {
+        signal: controller.signal,
+        headers: { Accept: 'application/json' },
+      });
+      if (!response.ok) throw new Error('HTTP ' + response.status);
+      const raw = await response.json();
+      const statKeys = {
+        hp: 'hp',
+        attack: 'attack',
+        defense: 'defense',
+        'special-attack': 'specialAttack',
+        'special-defense': 'specialDefense',
+        speed: 'speed',
+      };
+      const baseStats = {};
+      for (const entry of raw.stats || []) {
+        const key = statKeys[entry.stat?.name];
+        if (key) baseStats[key] = Number(entry.base_stat) || 1;
+      }
+      const types = (raw.types || [])
+        .slice()
+        .sort((a, b) => a.slot - b.slot)
+        .map((entry) => entry.type.name)
+        .filter((type) => Object.hasOwn(TYPE_CHART, type));
+      const pokemon = {
+        id,
+        name: pokemonSeed.find((entry) => entry.id === id)?.name || titleCase(raw.name),
+        types: types.length ? types : ['normal'],
+        baseStats,
+      };
+      if (raw.id !== id || Object.keys(baseStats).length !== 6) throw new Error('Dados incompletos.');
+      pokemonById.set(id, pokemon);
+      return pokemon;
+    } catch {
+      return {
+        id,
+        name: FIRST_GEN_NAMES[id - 1] || 'Pokémon #' + String(id).padStart(3, '0'),
+        types: ['normal'],
+        baseStats: {
+          hp: 60, attack: 60, defense: 60,
+          specialAttack: 60, specialDefense: 60, speed: 60,
+        },
+      };
+    } finally {
+      clearTimeout(timer);
+    }
+  })().finally(() => pokemonRequests.delete(id));
+  pokemonRequests.set(id, request);
+  return request;
+}
 export const rooms = new Map();
 
 function fail(status, message) {
@@ -279,17 +344,15 @@ function publicState(room, mySeat) {
     events: room.events.slice(-20),
   };
 }
-function validateTeam(ids) {
+async function validateTeam(ids) {
   if (!Array.isArray(ids) || ids.length !== 6) fail(400, 'Escolha exatamente 6 Pokémon.');
-  const unique = new Set();
-  return ids.map((value) => {
-    const id = Number(value);
-    if (!Number.isInteger(id) || !pokemonById.has(id) || unique.has(id)) {
-      fail(400, 'A equipe deve ter 6 Pokémon diferentes da primeira geração.');
-    }
-    unique.add(id);
-    return scaledStats(pokemonById.get(id));
-  });
+  const normalized = ids.map(Number);
+  const unique = new Set(normalized);
+  if (unique.size !== 6 || normalized.some((id) => !Number.isInteger(id) || id < 1 || id > 151)) {
+    fail(400, 'A equipe deve ter 6 Pokémon diferentes da primeira geração.');
+  }
+  const pokemon = await Promise.all(normalized.map((id) => getPokemonData(id)));
+  return pokemon.map((entry) => scaledStats(entry));
 }
 export async function handleApi(request, response, url) {
   const pathname = url.pathname;
@@ -315,7 +378,7 @@ export async function handleApi(request, response, url) {
     if (room.phase !== 'team') fail(409, 'A seleção da equipe já foi encerrada.');
     const body = await readBody(request);
     if (room.players[seat].team) fail(409, 'Sua equipe já foi confirmada.');
-    room.players[seat].team = validateTeam(body.ids);
+    room.players[seat].team = await validateTeam(body.ids);
     addEvent(room, `Treinador ${seat + 1} confirmou a equipe.`);
     if (room.players[0]?.team && room.players[1]?.team) {
       room.phase = 'battle';
