@@ -98,6 +98,8 @@ function createRoom() {
     winnerSeat: null,
     events: [],
     eventId: 0,
+    resolutionId: 0,
+    resolution: null,
   };
   rooms.set(code, room);
   return { room, seat: 0 };
@@ -137,56 +139,102 @@ function nextChoiceSeat(room) {
   const eligible = room.phase === 'switch' ? requiredSwitches(room) : [0, 1];
   return room.choiceOrder.find((seat) => eligible.includes(seat) && !room.actions[seat]) ?? null;
 }
+function snapshotRoom(room) {
+  return {
+    active: [...room.active],
+    hp: room.players.map((player) => player?.team?.map((pokemon) => pokemon.hp) || []),
+  };
+}
+function recordResolution(room, steps) {
+  room.resolutionId = (Number(room.resolutionId) || 0) + 1;
+  room.resolution = { id: room.resolutionId, turn: room.turn, steps };
+}
 function applySwitch(room, seat, index) {
+  const before = snapshotRoom(room);
+  const fromIndex = room.active[seat];
+  const fromName = room.players[seat].team[fromIndex].name;
   room.active[seat] = index;
-  addEvent(room, `Treinador ${seat + 1} enviou ${room.players[seat].team[index].name}.`);
+  const toName = room.players[seat].team[index].name;
+  const after = snapshotRoom(room);
+  addEvent(room, 'Treinador ' + (seat + 1) + ' enviou ' + toName + '.');
+  return { type: 'switch', seat, fromIndex, toIndex: index, fromName, toName, before, after };
 }
 function completeForcedSwitches(room) {
   const required = requiredSwitches(room);
   if (required.some((seat) => !room.actions[seat])) return;
-  for (const seat of required) applySwitch(room, seat, room.actions[seat].index);
+  const steps = [];
+  for (const seat of room.choiceOrder) {
+    if (required.includes(seat)) steps.push(applySwitch(room, seat, room.actions[seat].index));
+  }
   room.actions = [null, null];
+  recordResolution(room, steps);
   room.phase = 'battle';
   room.turn += 1;
   room.choiceOrder = chooseChoiceOrder(room);
-  addEvent(room, `Turno ${room.turn} começou. Treinador ${room.choiceOrder[0] + 1} escolhe primeiro.`);
+  addEvent(room, 'Turno ' + room.turn + ' começou. Treinador ' + (room.choiceOrder[0] + 1) + ' escolhe primeiro.');
 }
 function finishIfNeeded(room) {
   const defeated = [0, 1].map((seat) => room.players[seat].team.every((pokemon) => pokemon.hp <= 0));
   if (!defeated[0] && !defeated[1]) return false;
   room.phase = 'finished';
   room.winnerSeat = defeated[0] ? 1 : 0;
-  addEvent(room, `Treinador ${room.winnerSeat + 1} venceu a batalha!`);
+  addEvent(room, 'Treinador ' + (room.winnerSeat + 1) + ' venceu a batalha!');
   return true;
 }
+function makeMoveStep(room, seat) {
+  const before = snapshotRoom(room);
+  const attackerIndex = room.active[seat];
+  const defenderIndex = room.active[1 - seat];
+  const attacker = activePokemon(room, seat);
+  const defender = activePokemon(room, 1 - seat);
+  if (!attacker || !defender || attacker.hp <= 0 || defender.hp <= 0) {
+    const message = !attacker || attacker.hp <= 0
+      ? (attacker?.name || 'O Pokémon') + ' foi derrotado e não conseguiu atacar.'
+      : defender.name + ' já foi derrotado e não pode receber outro golpe.';
+    return { type: 'skip', seat, attackerIndex, defenderIndex, message, before, after: snapshotRoom(room) };
+  }
+  const move = attacker.moves[room.actions[seat].index];
+  const result = calculateDamage(attacker, defender, move, TYPE_CHART);
+  defender.hp = Math.max(0, defender.hp - result.damage);
+  let message = result.missed
+    ? attacker.name + ' usou ' + move.name + ', mas errou.'
+    : attacker.name + ' usou ' + move.name + ' e causou ' + result.damage + ' de dano.';
+  if (!result.missed && result.effectiveness > 1) message += ' Foi super efetivo!';
+  else if (!result.missed && result.effectiveness > 0 && result.effectiveness < 1) message += ' Não foi muito efetivo.';
+  else if (!result.missed && result.effectiveness === 0) message += ' Não teve efeito.';
+  if (result.critical) message += ' Acerto crítico!';
+  addEvent(room, message);
+  if (defender.hp <= 0) addEvent(room, defender.name + ' foi derrotado!');
+  return {
+    type: 'move',
+    seat,
+    attackerIndex,
+    defenderIndex,
+    attackerName: attacker.name,
+    defenderName: defender.name,
+    moveName: move.name,
+    damage: result.damage,
+    missed: result.missed,
+    message,
+    before,
+    after: snapshotRoom(room),
+  };
+}
 function resolveTurn(room) {
-  for (const seat of [0, 1]) {
+  const steps = [];
+  // Trocas têm prioridade e são exibidas antes dos golpes.
+  for (const seat of room.choiceOrder) {
     const action = room.actions[seat];
-    if (action?.type === 'switch') applySwitch(room, seat, action.index);
+    if (action?.type === 'switch') steps.push(applySwitch(room, seat, action.index));
   }
   const moveSeats = [0, 1].filter((seat) => room.actions[seat]?.type === 'move');
   moveSeats.sort((a, b) => {
     const speedDifference = activePokemon(room, b).speed - activePokemon(room, a).speed;
     return speedDifference || (Math.random() < 0.5 ? -1 : 1);
   });
-  for (const seat of moveSeats) {
-    const attacker = activePokemon(room, seat);
-    const defender = activePokemon(room, 1 - seat);
-    if (!attacker || !defender || attacker.hp <= 0 || defender.hp <= 0) continue;
-    const move = attacker.moves[room.actions[seat].index];
-    const result = calculateDamage(attacker, defender, move, TYPE_CHART);
-    defender.hp = Math.max(0, defender.hp - result.damage);
-    let message = result.missed
-      ? `${attacker.name} usou ${move.name}, mas errou.`
-      : `${attacker.name} usou ${move.name} e causou ${result.damage} de dano.`;
-    if (!result.missed && result.effectiveness > 1) message += ' Foi super efetivo!';
-    else if (!result.missed && result.effectiveness > 0 && result.effectiveness < 1) message += ' Não foi muito efetivo.';
-    else if (!result.missed && result.effectiveness === 0) message += ' Não teve efeito.';
-    if (result.critical) message += ' Acerto crítico!';
-    addEvent(room, message);
-    if (defender.hp <= 0) addEvent(room, `${defender.name} foi derrotado!`);
-  }
+  for (const seat of moveSeats) steps.push(makeMoveStep(room, seat));
   room.actions = [null, null];
+  recordResolution(room, steps);
   if (finishIfNeeded(room)) return;
   const switches = requiredSwitches(room);
   if (switches.length) {
@@ -196,7 +244,7 @@ function resolveTurn(room) {
   }
   room.turn += 1;
   room.choiceOrder = chooseChoiceOrder(room);
-  addEvent(room, `Turno ${room.turn} começou. Treinador ${room.choiceOrder[0] + 1} escolhe primeiro.`);
+  addEvent(room, 'Turno ' + room.turn + ' começou. Treinador ' + (room.choiceOrder[0] + 1) + ' escolhe primeiro.');
 }
 function publicState(room, mySeat) {
   const now = Date.now();
@@ -227,6 +275,7 @@ function publicState(room, mySeat) {
         team,
       };
     }),
+    resolution: room.resolution || null,
     events: room.events.slice(-20),
   };
 }

@@ -183,15 +183,77 @@ function setSprite(root, side, pokemon, loaded) {
   loaded[side] = pokemon.id;
   const image = $('#' + side + '-sprite', root);
   const fallback = $('#' + side + '-sprite-fallback', root);
+  for (const element of [image, fallback]) {
+    element.classList.remove('is-attacking-player', 'is-attacking-enemy', 'is-hit', 'is-fainting', 'is-entering', 'is-switching-out');
+  }
   image.hidden = false;
   fallback.hidden = true;
   image.alt = pokemon.name;
   image.src = getSpriteUrl(pokemon.id, side === 'player' ? 'back' : 'front');
   image.onerror = () => {
+    if (loaded[side] !== pokemon.id) return;
     image.hidden = true;
     fallback.textContent = '✦ ' + pokemon.name;
     fallback.hidden = false;
   };
+}
+function pause(ms, signal) {
+  return new Promise((resolve) => {
+    if (signal.aborted) return resolve(false);
+    const timer = setTimeout(() => finish(true), ms);
+    const onAbort = () => finish(false);
+    function finish(value) {
+      clearTimeout(timer);
+      signal.removeEventListener('abort', onAbort);
+      resolve(value);
+    }
+    signal.addEventListener('abort', onAbort, { once: true });
+  });
+}
+function animatePvpSprite(root, side, className, duration, signal, keep = false) {
+  const image = $('#' + side + '-sprite', root);
+  const fallback = $('#' + side + '-sprite-fallback', root);
+  const sprite = image.hidden ? fallback : image;
+  sprite.classList.remove(className);
+  void sprite.offsetWidth;
+  sprite.classList.add(className);
+  return new Promise((resolve) => {
+    let finished = false;
+    const timer = setTimeout(() => finish(true), duration + 120);
+    const onAbort = () => finish(false);
+    function finish(completed) {
+      if (finished) return;
+      finished = true;
+      clearTimeout(timer);
+      sprite.removeEventListener('animationend', onAnimationEnd);
+      signal.removeEventListener('abort', onAbort);
+      if (!keep || !completed) sprite.classList.remove(className);
+      resolve(completed);
+    }
+    function onAnimationEnd(event) {
+      if (event.target === sprite) finish(true);
+    }
+    sprite.addEventListener('animationend', onAnimationEnd);
+    signal.addEventListener('abort', onAbort, { once: true });
+  });
+}
+function renderReplaySnapshot(root, state, snapshot, session, loadedSprites) {
+  for (const seat of [0, 1]) {
+    const side = seat === session.seat ? 'player' : 'enemy';
+    const player = state.players[seat];
+    if (!player?.team) continue;
+    const index = snapshot.active[seat];
+    const member = player.team[index];
+    if (!member) continue;
+    const hp = snapshot.hp?.[seat]?.[index] ?? member.hp;
+    const pokemon = Object.assign({}, member, { hp });
+    setSprite(root, side, pokemon, loadedSprites);
+    const remaining = snapshot.hp?.[seat]?.filter((value) => value > 0).length
+      ?? player.team.filter((entry) => entry.hp > 0).length;
+    $('#' + side + '-name', root).textContent = pokemon.name + ' ' + remaining + '/6';
+    $('#' + side + '-level', root).textContent = String(pokemon.level || 50);
+    updateHealth(root, side, pokemon);
+  }
 }
 function makeChoiceButton(text, detail, onClick, type = 'normal') {
   const button = document.createElement('button');
@@ -214,12 +276,17 @@ export function mountPvpBattle(root, { session, onExit, signal: ownerSignal }) {
   const switchButton = $('#btn-switch', root);
   const quit = $('#btn-quit', root);
   const choices = $('#move-buttons', root);
-  $('#battle-dialog', root).dataset.pvp = 'true';
+  const dialog = $('#battle-dialog', root);
+  const actions = $('.battle__actions', root);
+  dialog.dataset.pvp = 'true';
+  actions.dataset.nav = 'horizontal';
   const loadedSprites = { player: null, enemy: null };
   let timer = null;
   let lastControl = '';
   let lastEvent = 0;
+  let lastResolutionId = 0;
   let sending = false;
+  let polling = false;
   let ended = false;
   let currentSnapshot = null;
 
@@ -228,32 +295,34 @@ export function mountPvpBattle(root, { session, onExit, signal: ownerSignal }) {
   $('#btn-result-menu', root).dataset.action = 'pvp-exit';
   quit.addEventListener('click', onExit, { signal });
   fight.addEventListener('click', () => {
-    if (ended || sending) return;
+    if (ended || sending || polling) return;
     const current = currentSnapshot;
-    const active = current?.players[session.seat]?.team?.[current.players[session.seat].activeIndex];
+    const mine = current?.players[session.seat];
+    const active = mine?.team?.[mine.activeIndex];
     if (!active) return;
     choices.replaceChildren();
     active.moves.forEach((move, index) => {
-      choices.append(makeChoiceButton(move.name, `POT ${move.power} · PREC ${move.accuracy}%`, () => send({ type: 'move', index }), move.type));
+      choices.append(makeChoiceButton(move.name, 'POT ' + move.power + ' · PREC ' + move.accuracy + '%', () => send({ type: 'move', index }), move.type));
     });
-    $('#battle-dialog', root).dataset.mode = 'moves';
+    dialog.dataset.mode = 'moves';
   }, { signal });
   switchButton.addEventListener('click', () => {
-    if (ended || sending) return;
+    if (ended || sending || polling) return;
     const current = currentSnapshot;
     const mine = current?.players[session.seat];
     if (!mine?.team) return;
     choices.replaceChildren();
     mine.team.forEach((pokemon, index) => {
       if (index === mine.activeIndex || pokemon.hp <= 0) return;
-      choices.append(makeChoiceButton(pokemon.name, `HP ${pokemon.hp}/${pokemon.hpMax} · TROCAR`, () => send({ type: 'switch', index }), pokemon.types[0] || 'normal'));
+      choices.append(makeChoiceButton(pokemon.name, 'HP ' + pokemon.hp + '/' + pokemon.hpMax + ' · TROCAR', () => send({ type: 'switch', index }), pokemon.types[0] || 'normal'));
     });
-    $('#battle-dialog', root).dataset.mode = 'moves';
+    dialog.dataset.mode = 'moves';
   }, { signal });
   async function send(action) {
-    if (sending || signal.aborted) return;
+    if (sending || polling || signal.aborted) return;
     sending = true;
-    $('#battle-dialog', root).dataset.mode = 'text';
+    clearTimeout(timer);
+    dialog.dataset.mode = 'text';
     $('#battle-text', root).textContent = 'Ação enviada. Aguardando o adversário…';
     try {
       await submitPvpAction(session, action);
@@ -265,6 +334,7 @@ export function mountPvpBattle(root, { session, onExit, signal: ownerSignal }) {
       }
     } finally {
       sending = false;
+      if (!signal.aborted && !ended && !timer) timer = setTimeout(poll, 900);
     }
   }
   function showResult(state) {
@@ -283,28 +353,81 @@ export function mountPvpBattle(root, { session, onExit, signal: ownerSignal }) {
     $('#btn-result-menu', root).hidden = false;
     $('#btn-result-menu', root).focus({ preventScroll: true });
   }
+  async function playResolution(state, resolution) {
+    for (const step of resolution.steps || []) {
+      if (signal.aborted) return false;
+      renderReplaySnapshot(root, state, step.before, session, loadedSprites);
+      if (step.type === 'switch') {
+        const seatSide = step.seat === session.seat ? 'player' : 'enemy';
+        const oldHp = step.before.hp?.[step.seat]?.[step.fromIndex] ?? 0;
+        $('#battle-text', root).textContent = oldHp > 0 ? step.fromName + ', volte!' : step.fromName + ' foi derrotado.';
+        if (oldHp > 0) {
+          if (!await animatePvpSprite(root, seatSide, 'is-switching-out', 360, signal)) return false;
+        }
+        renderReplaySnapshot(root, state, step.after, session, loadedSprites);
+        $('#battle-text', root).textContent = 'Treinador ' + (step.seat + 1) + ' enviou ' + step.toName + '!';
+        if (!await animatePvpSprite(root, seatSide, 'is-entering', 800, signal)) return false;
+        continue;
+      }
+      if (step.type === 'skip') {
+        $('#battle-text', root).textContent = step.message;
+        if (!await pause(550, signal)) return false;
+        continue;
+      }
+      const attackerSide = step.seat === session.seat ? 'player' : 'enemy';
+      const defenderSide = step.seat === session.seat ? 'enemy' : 'player';
+      $('#battle-text', root).textContent = step.attackerName + ' usou ' + step.moveName + '!';
+      if (!await animatePvpSprite(
+        root,
+        attackerSide,
+        attackerSide === 'player' ? 'is-attacking-player' : 'is-attacking-enemy',
+        700,
+        signal,
+      )) return false;
+      // O HP só muda depois da animação do golpe que o causou.
+      renderReplaySnapshot(root, state, step.after, session, loadedSprites);
+      $('#battle-text', root).textContent = step.message;
+      const targetHp = step.after.hp?.[1 - step.seat]?.[step.defenderIndex] ?? 0;
+      if (!step.missed && step.damage > 0) {
+        if (!await animatePvpSprite(root, defenderSide, 'is-hit', 750, signal)) return false;
+      } else if (!await pause(350, signal)) return false;
+      if (targetHp <= 0) {
+        $('#battle-text', root).textContent = step.defenderName + ' foi derrotado!';
+        if (!await animatePvpSprite(root, defenderSide, 'is-fainting', 900, signal, true)) return false;
+      }
+    }
+    return !signal.aborted;
+  }
   async function poll() {
-    if (signal.aborted || ended) return;
+    if (signal.aborted || ended || polling) return;
+    clearTimeout(timer);
+    polling = true;
     try {
       const state = await getPvpState(session, signal);
       if (signal.aborted) return;
-      currentSnapshot = state;
       const mine = state.players[session.seat];
       const enemy = state.players[1 - session.seat];
       if (!mine?.team || !enemy?.team) throw new Error('A equipe do adversário não está disponível.');
-      const player = mine.team[mine.activeIndex];
-      const opponent = enemy.team[enemy.activeIndex];
-      setSprite(root, 'player', player, loadedSprites);
-      setSprite(root, 'enemy', opponent, loadedSprites);
-      $('#player-name', root).textContent = `${player.name} ${mine.team.filter((member) => member.hp > 0).length}/6`;
-      $('#enemy-name', root).textContent = `${opponent.name} ${enemy.team.filter((member) => member.hp > 0).length}/6`;
-      $('#player-level', root).textContent = String(player.level || 50);
-      $('#enemy-level', root).textContent = String(opponent.level || 50);
-      updateHealth(root, 'player', player);
-      updateHealth(root, 'enemy', opponent);
-      for (const event of state.events) {
+      currentSnapshot = state;
+      let playedResolution = false;
+      const resolution = state.resolution;
+      if (resolution && resolution.id > lastResolutionId) {
+        lastResolutionId = resolution.id;
+        dialog.dataset.mode = 'text';
+        fight.hidden = true;
+        switchButton.hidden = true;
+        if (!await playResolution(state, resolution)) return;
+        playedResolution = true;
+      } else {
+        const snapshot = {
+          active: state.players.map((player) => player?.activeIndex ?? 0),
+          hp: state.players.map((player) => player?.team?.map((pokemon) => pokemon.hp) || []),
+        };
+        renderReplaySnapshot(root, state, snapshot, session, loadedSprites);
+      }
+      for (const event of state.events || []) {
         if (event.id > lastEvent) {
-          $('#battle-text', root).textContent = event.message;
+          if (!playedResolution) $('#battle-text', root).textContent = event.message;
           lastEvent = event.id;
         }
       }
@@ -313,7 +436,7 @@ export function mountPvpBattle(root, { session, onExit, signal: ownerSignal }) {
         return;
       }
       const hasReserves = mine.team.some((pokemon, index) => index !== mine.activeIndex && pokemon.hp > 0);
-      const key = `${state.phase}:${state.turn}:${mine.hasSubmitted}:${mine.mustSwitch}:${mine.activeIndex}:${mine.canChoose}:${state.nextChoiceSeat}`;
+      const key = [state.phase, state.turn, mine.hasSubmitted, mine.mustSwitch, mine.activeIndex, mine.canChoose, state.nextChoiceSeat].join(':');
       if (key !== lastControl) {
         lastControl = key;
         if (state.phase === 'switch' && mine.mustSwitch && !mine.hasSubmitted && mine.canChoose) {
@@ -321,33 +444,49 @@ export function mountPvpBattle(root, { session, onExit, signal: ownerSignal }) {
           switchButton.hidden = false;
           switchButton.textContent = 'ESCOLHER SUBSTITUTO';
           $('#battle-text', root).textContent = 'Seu Pokémon foi derrotado. Escolha quem entra.';
-          $('#battle-dialog', root).dataset.mode = 'actions';
+          dialog.dataset.mode = 'actions';
         } else if (mine.hasSubmitted || state.phase === 'switch' || !mine.canChoose) {
           fight.hidden = true;
           switchButton.hidden = true;
           $('#battle-text', root).textContent = mine.hasSubmitted
-            ? `Ação enviada. Aguarde o Treinador ${state.nextChoiceSeat + 1} escolher.`
+            ? 'Ação enviada. Aguarde o Treinador ' + ((state.nextChoiceSeat ?? 0) + 1) + ' escolher.'
             : state.phase === 'switch'
-              ? `Aguarde o Treinador ${state.nextChoiceSeat + 1} escolher um substituto.`
-              : `Treinador ${state.nextChoiceSeat + 1} escolhe primeiro.`;
-          $('#battle-dialog', root).dataset.mode = 'text';
+              ? 'Aguarde o Treinador ' + ((state.nextChoiceSeat ?? 0) + 1) + ' escolher um substituto.'
+              : 'Treinador ' + ((state.nextChoiceSeat ?? 0) + 1) + ' escolhe primeiro.';
+          dialog.dataset.mode = 'text';
         } else {
           fight.hidden = false;
           fight.textContent = 'ATACAR';
           switchButton.hidden = !hasReserves;
           switchButton.textContent = 'TROCAR';
-          $('#battle-text', root).textContent = `TURNO ${state.turn} — escolha sua ação.`;
-          $('#battle-dialog', root).dataset.mode = 'actions';
+          $('#battle-text', root).textContent = 'TURNO ' + state.turn + ' — escolha sua ação.';
+          dialog.dataset.mode = 'actions';
         }
       }
       quit.hidden = false;
     } catch (error) {
       if (!signal.aborted) $('#battle-text', root).textContent = error.message;
+    } finally {
+      polling = false;
+      if (!signal.aborted && !ended) timer = setTimeout(poll, 900);
     }
-    if (!signal.aborted && !ended) timer = setTimeout(poll, 900);
   }
   poll();
   return {
-    destroy() { clearTimeout(timer); lifetime.destroy(); },
+    destroy() {
+      clearTimeout(timer);
+      dialog.removeAttribute('data-pvp');
+      actions.dataset.nav = 'vertical';
+      for (const side of ['player', 'enemy']) {
+        const image = $('#' + side + '-sprite', root);
+        const fallback = $('#' + side + '-sprite-fallback', root);
+        for (const element of [image, fallback]) {
+          element.classList.remove('is-attacking-player', 'is-attacking-enemy', 'is-hit', 'is-fainting', 'is-entering', 'is-switching-out');
+        }
+      }
+      quit.textContent = 'DESISTIR';
+      $('#btn-result-menu', root).removeAttribute('data-action');
+      lifetime.destroy();
+    },
   };
 }
