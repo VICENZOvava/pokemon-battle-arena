@@ -12,3 +12,6 @@ await mkdir(output, { recursive: true });
 for (const entry of publicEntries) {
   await cp(resolve(root, entry), resolve(output, entry), { recursive: true });
 }
+
+
+// teste comentar
