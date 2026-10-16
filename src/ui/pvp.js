@@ -214,6 +214,7 @@ export function mountPvpBattle(root, { session, onExit, signal: ownerSignal }) {
   const switchButton = $('#btn-switch', root);
   const quit = $('#btn-quit', root);
   const choices = $('#move-buttons', root);
+  $('#battle-dialog', root).dataset.pvp = 'true';
   const loadedSprites = { player: null, enemy: null };
   let timer = null;
   let lastControl = '';
@@ -312,19 +313,23 @@ export function mountPvpBattle(root, { session, onExit, signal: ownerSignal }) {
         return;
       }
       const hasReserves = mine.team.some((pokemon, index) => index !== mine.activeIndex && pokemon.hp > 0);
-      const key = `${state.phase}:${state.turn}:${mine.hasSubmitted}:${mine.mustSwitch}:${mine.activeIndex}`;
+      const key = `${state.phase}:${state.turn}:${mine.hasSubmitted}:${mine.mustSwitch}:${mine.activeIndex}:${mine.canChoose}:${state.nextChoiceSeat}`;
       if (key !== lastControl) {
         lastControl = key;
-        if (state.phase === 'switch' && mine.mustSwitch && !mine.hasSubmitted) {
+        if (state.phase === 'switch' && mine.mustSwitch && !mine.hasSubmitted && mine.canChoose) {
           fight.hidden = true;
           switchButton.hidden = false;
           switchButton.textContent = 'ESCOLHER SUBSTITUTO';
           $('#battle-text', root).textContent = 'Seu Pokémon foi derrotado. Escolha quem entra.';
           $('#battle-dialog', root).dataset.mode = 'actions';
-        } else if (mine.hasSubmitted || state.phase === 'switch') {
+        } else if (mine.hasSubmitted || state.phase === 'switch' || !mine.canChoose) {
           fight.hidden = true;
           switchButton.hidden = true;
-          $('#battle-text', root).textContent = 'Ação enviada. Aguardando o adversário…';
+          $('#battle-text', root).textContent = mine.hasSubmitted
+            ? `Ação enviada. Aguarde o Treinador ${state.nextChoiceSeat + 1} escolher.`
+            : state.phase === 'switch'
+              ? `Aguarde o Treinador ${state.nextChoiceSeat + 1} escolher um substituto.`
+              : `Treinador ${state.nextChoiceSeat + 1} escolhe primeiro.`;
           $('#battle-dialog', root).dataset.mode = 'text';
         } else {
           fight.hidden = false;

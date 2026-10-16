@@ -2,6 +2,7 @@ import { createServer } from 'node:http';
 import { readFile, stat } from 'node:fs/promises';
 import { dirname, extname, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { createRequire } from 'node:module';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { calculateDamage } from './src/battle/damage.js';
 import { TYPE_CHART } from './src/battle/typeChart.js';
@@ -10,10 +11,11 @@ const ROOT = dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT) || 3000;
 const ROOM_TTL = 2 * 60 * 60 * 1000;
 const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-const pokemonSeed = JSON.parse(await readFile(resolve(ROOT, 'data/pokemon.json'), 'utf8'));
-const moveBook = JSON.parse(await readFile(resolve(ROOT, 'data/moves.json'), 'utf8'));
+const require = createRequire(import.meta.url);
+const pokemonSeed = require('./data/pokemon.json');
+const moveBook = require('./data/moves.json');
 const pokemonById = new Map(pokemonSeed.map((pokemon) => [pokemon.id, pokemon]));
-const rooms = new Map();
+export const rooms = new Map();
 
 function fail(status, message) {
   const error = new Error(message);
@@ -86,6 +88,7 @@ function createRoom() {
     players: [{ token: randomUUID(), team: null }, null],
     active: [0, 0],
     actions: [null, null],
+    choiceOrder: [0, 1],
     phase: 'team',
     turn: 1,
     winnerSeat: null,
@@ -120,6 +123,16 @@ function requiredSwitches(room) {
     return team && team[room.active[seat]]?.hp <= 0 && team.some((pokemon) => pokemon.hp > 0);
   });
 }
+function chooseChoiceOrder(room) {
+  const hp0 = activePokemon(room, 0)?.hp ?? 0;
+  const hp1 = activePokemon(room, 1)?.hp ?? 0;
+  if (hp0 !== hp1) return hp0 > hp1 ? [0, 1] : [1, 0];
+  return Math.random() < 0.5 ? [0, 1] : [1, 0];
+}
+function nextChoiceSeat(room) {
+  const eligible = room.phase === 'switch' ? requiredSwitches(room) : [0, 1];
+  return room.choiceOrder.find((seat) => eligible.includes(seat) && !room.actions[seat]) ?? null;
+}
 function applySwitch(room, seat, index) {
   room.active[seat] = index;
   addEvent(room, `Treinador ${seat + 1} enviou ${room.players[seat].team[index].name}.`);
@@ -131,7 +144,8 @@ function completeForcedSwitches(room) {
   room.actions = [null, null];
   room.phase = 'battle';
   room.turn += 1;
-  addEvent(room, `Turno ${room.turn} começou.`);
+  room.choiceOrder = chooseChoiceOrder(room);
+  addEvent(room, `Turno ${room.turn} começou. Treinador ${room.choiceOrder[0] + 1} escolhe primeiro.`);
 }
 function finishIfNeeded(room) {
   const defeated = [0, 1].map((seat) => room.players[seat].team.every((pokemon) => pokemon.hp <= 0));
@@ -177,16 +191,19 @@ function resolveTurn(room) {
     return;
   }
   room.turn += 1;
-  addEvent(room, `Turno ${room.turn} começou.`);
+  room.choiceOrder = chooseChoiceOrder(room);
+  addEvent(room, `Turno ${room.turn} começou. Treinador ${room.choiceOrder[0] + 1} escolhe primeiro.`);
 }
 function publicState(room, mySeat) {
   const now = Date.now();
+  const choiceSeat = ['battle', 'switch'].includes(room.phase) ? nextChoiceSeat(room) : null;
   return {
     roomCode: room.code,
     phase: room.phase,
     turn: room.turn,
     winnerSeat: room.winnerSeat,
     mySeat,
+    nextChoiceSeat: choiceSeat,
     players: room.players.map((player, seat) => {
       if (!player) return null;
       const team = player.team?.map((pokemon) => ({
@@ -200,6 +217,7 @@ function publicState(room, mySeat) {
         ready: Boolean(team),
         activeIndex: room.active[seat],
         hasSubmitted: Boolean(room.actions[seat]),
+        canChoose: choiceSeat === seat,
         mustSwitch: room.phase === 'switch' && requiredSwitches(room).includes(seat),
         online: now - room.lastSeen[seat] < 30000,
         team,
@@ -220,7 +238,7 @@ function validateTeam(ids) {
     return scaledStats(pokemonById.get(id));
   });
 }
-async function handleApi(request, response, url) {
+export async function handleApi(request, response, url) {
   const pathname = url.pathname;
   if (pathname === '/api/pvp/rooms' && request.method === 'POST') {
     const { room, seat } = createRoom();
@@ -249,7 +267,8 @@ async function handleApi(request, response, url) {
     if (room.players[0]?.team && room.players[1]?.team) {
       room.phase = 'battle';
       room.turn = 1;
-      addEvent(room, 'A batalha começou! Turno 1.');
+      room.choiceOrder = chooseChoiceOrder(room);
+      addEvent(room, `A batalha começou! Treinador ${room.choiceOrder[0] + 1} escolhe primeiro.`);
     }
     return sendJson(response, 200, publicState(room, seat));
   }
@@ -258,6 +277,10 @@ async function handleApi(request, response, url) {
     if (room.phase !== 'battle' && room.phase !== 'switch') fail(409, 'A batalha não está recebendo ações.');
     if (!room.players[seat].team) fail(409, 'Confirme sua equipe primeiro.');
     if (room.actions[seat]) fail(409, 'Sua ação deste turno já foi enviada.');
+    const choiceSeat = nextChoiceSeat(room);
+    if (choiceSeat !== seat) {
+      fail(409, choiceSeat === null ? 'Aguarde o encerramento do turno.' : `Agora é a vez do Treinador ${choiceSeat + 1} escolher.`);
+    }
     const index = Number(body.index);
     if (!Number.isInteger(index)) fail(400, 'Ação inválida.');
     const active = activePokemon(room, seat);
@@ -267,16 +290,19 @@ async function handleApi(request, response, url) {
         fail(400, 'Escolha um Pokémon disponível para continuar.');
       }
       room.actions[seat] = { type: 'switch', index };
+      addEvent(room, `Treinador ${seat + 1} escolheu um substituto.`);
       completeForcedSwitches(room);
     } else if (body.type === 'switch') {
       if (index < 0 || index >= 6 || index === room.active[seat] || room.players[seat].team[index].hp <= 0) {
         fail(400, 'Escolha um Pokémon disponível para trocar.');
       }
       room.actions[seat] = { type: 'switch', index };
+      addEvent(room, `Treinador ${seat + 1} escolheu uma ação.`);
       if (room.actions[1 - seat]) resolveTurn(room);
     } else if (body.type === 'move') {
       if (active.hp <= 0 || index < 0 || index >= active.moves.length) fail(400, 'Golpe inválido.');
       room.actions[seat] = { type: 'move', index };
+      addEvent(room, `Treinador ${seat + 1} escolheu uma ação.`);
       if (room.actions[1 - seat]) resolveTurn(room);
     } else {
       fail(400, 'Ação inválida.');
@@ -334,6 +360,8 @@ const server = createServer(async (request, response) => {
   }
   await serveStatic(request, response, url);
 });
-server.listen(PORT, '0.0.0.0', () => {
+if (process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import.meta.url))) {
+  server.listen(PORT, '0.0.0.0', () => {
   console.log(`Pokémon Battle Arena disponível em http://localhost:${PORT}`);
 });
+}

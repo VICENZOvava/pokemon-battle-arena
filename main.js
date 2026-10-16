@@ -130,6 +130,7 @@ async function enterBattle() {
   $('#btn-result-menu').dataset.goto = 'menu';
   delete $('#btn-result-menu').dataset.action;
   $('#battle-dialog').dataset.mode = 'text';
+  delete $('#battle-dialog').dataset.pvp;
   $('#battle-text').textContent = 'Preparando a batalha…';
   $('#move-buttons').replaceChildren();
   $('#move-info').replaceChildren();

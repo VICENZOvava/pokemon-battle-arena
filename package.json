@@ -4,6 +4,10 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
+    "build": "node scripts/build-static.mjs",
     "start": "node server.mjs"
+  },
+  "dependencies": {
+    "@upstash/redis": "^1.39.0"
   }
 }
