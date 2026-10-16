@@ -1,6 +1,5 @@
 # Pokémon Battle Arena
 
-![Tela inicial do Pokémon Battle Arena](assets/fotos/picture1.png)
 
 ## Sobre o projeto
 
