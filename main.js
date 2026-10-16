@@ -383,5 +383,3 @@ function init() {
 }
 
 init();
-
-// teste comentar

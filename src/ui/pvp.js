@@ -56,6 +56,9 @@ export async function mountPvpTeam(root, { session, onBattle, signal: ownerSigna
   const selected = [];
   let locked = false;
   let transitioned = false;
+  let submitting = false;
+  let polling = false;
+  let submissionError = '';
   let timer = null;
 
   function renderParty() {
@@ -117,7 +120,9 @@ export async function mountPvpTeam(root, { session, onBattle, signal: ownerSigna
     });
   }
   async function poll() {
-    if (signal.aborted || transitioned) return;
+    if (signal.aborted || transitioned || submitting || polling) return;
+    polling = true;
+    timer = null;
     try {
       const state = await getPvpState(session, signal);
       if (signal.aborted) return;
@@ -129,32 +134,55 @@ export async function mountPvpTeam(root, { session, onBattle, signal: ownerSigna
         return;
       }
       if (state.phase === 'finished') {
-        message.textContent = 'A sala foi encerrada. Saia e crie outra para jogar.';
+        if (!submissionError) message.textContent = 'A sala foi encerrada. Saia e crie outra para jogar.';
       } else if (mine?.ready) {
         locked = true;
+        submissionError = '';
         message.textContent = opponent?.ready ? 'Equipes prontas. Iniciando…' : 'Equipe confirmada. Aguardando o adversário…';
         renderParty();
-      } else {
+      } else if (!submitting && !submissionError) {
         message.textContent = opponent ? 'Adversário conectado. Escolha 6 Pokémon e confirme sua equipe.' : 'Compartilhe o código da sala para encontrar um adversário.';
       }
     } catch (error) {
-      if (!signal.aborted) message.textContent = error.message;
+      if (!signal.aborted && !submissionError) message.textContent = error.message;
+    } finally {
+      polling = false;
+      if (!signal.aborted && !transitioned && !submitting) timer = setTimeout(poll, 1200);
     }
-    if (!signal.aborted && !transitioned) timer = setTimeout(poll, 1200);
   }
 
   ready.addEventListener('click', async () => {
-    if (selected.length !== 6 || locked) return;
+    if (selected.length !== 6 || locked || submitting) return;
     locked = true;
+    submitting = true;
+    submissionError = '';
+    clearTimeout(timer);
+    timer = null;
     renderParty();
     message.textContent = 'Confirmando equipe…';
+    while (polling && !signal.aborted) {
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    }
+    if (signal.aborted) {
+      submitting = false;
+      return;
+    }
     try {
       await setPvpTeam(session, selected);
-      if (!signal.aborted) poll();
+      if (!signal.aborted) {
+        submitting = false;
+        await poll();
+      }
     } catch (error) {
-      locked = false;
-      renderParty();
-      message.textContent = error.message;
+      if (!signal.aborted) {
+        locked = false;
+        submissionError = error.message;
+        renderParty();
+        message.textContent = 'Não foi possível confirmar: ' + error.message;
+      }
+    } finally {
+      submitting = false;
+      if (!signal.aborted && !transitioned && !timer) timer = setTimeout(poll, 1200);
     }
   }, { signal });
   try {

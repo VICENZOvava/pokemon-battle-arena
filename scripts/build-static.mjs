@@ -13,5 +13,3 @@ for (const entry of publicEntries) {
   await cp(resolve(root, entry), resolve(output, entry), { recursive: true });
 }
 
-
-// teste comentar
