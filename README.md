@@ -25,4 +25,4 @@ O projeto utiliza a [PokéAPI v2](https://pokeapi.co/docs/v2) para consultar a l
 
 Os golpes e a tabela de efetividade também contam com dados locais no projeto.
 
-Pokémon e seus personagens pertencem aos respectivos titulares. Este projeto é independente e não é afiliado à Nintendo, à Game Freak ou à The Pokémon Company.
+Pokémon e seus personagens pertencem aos respectivos titulares. Este projeto é independente e não é afiliado à Nintendo, à Game Freak ou à The Pokémon Company. Apenas um projeto para fins educacionais.
