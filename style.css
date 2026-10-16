@@ -543,17 +543,17 @@ noscript { color: #fff; font-size: 12px; }
 }
 
 .sprite--enemy {
-  top: var(--u6);
+  top: calc(var(--u) * 5);
   right: calc(var(--u) * 40);
   width: calc(var(--u) * 56);
   height: calc(var(--u) * 56);
 }
 
 .sprite--player {
-  bottom: var(--u8);
-  left: calc(var(--u) * 13);
-  width: calc(var(--u) * 80);
-  height: calc(var(--u) * 80);
+  bottom: calc(var(--u) * 7);
+  left: calc(var(--u) * 21);
+  width: calc(var(--u) * 64);
+  height: calc(var(--u) * 64);
 }
 
 .status {
@@ -875,3 +875,22 @@ noscript { color: #fff; font-size: 12px; }
   .selection__header h2 { font-size: calc(var(--u) * 6); }
   .selection__search { width: calc(var(--u) * 58); }
 }
+
+/* ---------------------------------------------------------- pvp online */
+.menu .menu-item { height: calc(var(--u) * 18); }
+.screen--online { display: grid; place-items: center; padding: var(--u8); background: var(--sea); }
+.pvp-lobby { display: grid; gap: var(--u4); width: calc(var(--u) * 188); max-width: calc(100% - var(--u8)); padding: var(--u6); font-size: var(--u5); }
+.pvp-lobby h2 { font-size: var(--u8); }
+.pvp-lobby p { line-height: 1.8; }
+.pvp-lobby__join { display: grid; grid-template-columns: 1fr auto; gap: var(--u2); }
+.pvp-lobby__join input { min-width: 0; padding: var(--u2); border: var(--u2) solid var(--ink); background: var(--paper); font: inherit; text-transform: uppercase; }
+.pvp-lobby__status { min-height: calc(var(--u) * 10); color: var(--fire-deep); }
+.pvp-team__code { color: var(--paper); font-size: var(--u5); }
+.pvp-party { align-items: stretch; text-align: left; }
+.pvp-party h3 { color: var(--fire-deep); font-size: var(--u6); text-align: center; }
+.pvp-party__list { display: grid; gap: var(--u2); margin: 0; padding-left: var(--u7); font-size: calc(var(--u) * 4.5); }
+.pvp-party__list li { display: flex; align-items: center; justify-content: space-between; gap: var(--u); }
+.pvp-party__remove { padding: 0 var(--u); border: 0; background: transparent; color: var(--fire-deep); font: inherit; cursor: pointer; }
+.pvp-team__message { margin-top: auto; font-size: calc(var(--u) * 4.5); line-height: 1.6; }
+.battle__actions .menu-item { height: auto; min-height: 0; flex: 1; padding: var(--u); font-size: calc(var(--u) * 4.5); }
+.screen--menu .dialog { height: calc(var(--u) * 16); font-size: calc(var(--u) * 5); }

@@ -4,9 +4,7 @@ Jogo de batalha por turnos no navegador, com interface em português e visual in
 
 ## Como jogar
 
-Abra a pasta no VS Code após baixar o repositório e inicie um servidor estático, por exemplo com a extensão Live Server. Também é possível executar **python -m http.server 8000** na pasta do projeto e abrir **http://localhost:8000** no navegador. O servidor é necessário porque o jogo usa módulos JavaScript e carrega dados JSON locais.
-
-Clique em **APERTE START** para liberar a música, escolha um Pokémon e selecione **LUTAR** para ver seus golpes. Escape volta para a tela anterior; as setas navegam pelos menus e listas.
+Use **Node.js 18 ou mais recente**. Execute `npm start` na pasta do projeto e abra **http://localhost:3000**. Clique em **APERTE START**, escolha um Pokémon e selecione **LUTAR** para ver seus golpes. Escape volta para a tela anterior; as setas navegam pelos menus e listas. O servidor integrado também habilita o modo PvP.
 
 ## Conteúdo
 
@@ -19,3 +17,9 @@ Clique em **APERTE START** para liberar a música, escolha um Pokémon e selecio
 - Música em loop carregada de assets/audio.
 
 O catálogo usa a PokéAPI e sprites públicos do projeto PokeAPI. Sem conexão, a seleção local continua jogável; sprites remotos podem não aparecer.
+
+## PvP online 6x6
+
+No menu, escolha **PVP ONLINE 6X6**. Um jogador cria a sala e compartilha o código; o outro entra com esse código. Cada um seleciona seis Pokémon diferentes da primeira geração. As ações são por turno, as trocas consomem a ação e, quando um Pokémon desmaia, seu treinador escolhe um substituto. A partida termina quando uma equipe perde os seis Pokémon.
+
+Para partidas pela internet, hospede o projeto em um serviço que execute o servidor Node e disponibilize a mesma origem para os dois jogadores. Salas e partidas ficam na memória do processo e são encerradas quando o servidor reinicia.

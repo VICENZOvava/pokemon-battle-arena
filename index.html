@@ -26,11 +26,26 @@
       <nav class="box menu" data-nav="vertical" aria-label="Menu principal">
         <button class="menu-item" type="button" data-action="play" data-hint="Escolha um Pokémon e enfrente o adversário."><span>NOVA BATALHA</span></button>
         <button class="menu-item" type="button" data-action="tower" data-hint="Enfrente 10 andares seguidos usando apenas um Pokémon."><span>BATALHA DA TORRE</span></button>
+        <button class="menu-item" type="button" data-action="pvp" data-hint="Desafie outro jogador em uma batalha 6 contra 6."><span>PVP ONLINE 6X6</span></button>
         <button class="menu-item" type="button" data-action="difficulty" data-hint="Ajuste o comportamento da IA adversária."><span>DIFICULDADE</span><span class="menu-item__value" id="difficulty-label">NORMAL</span></button>
         <button class="menu-item" type="button" data-action="sound" data-hint="Ative ou silencie a música de batalha."><span>MÚSICA</span><span class="menu-item__value" id="sound-label">LIGADA</span></button>
         <button class="menu-item" type="button" data-goto="credits" data-hint="Veja os dados e recursos usados no projeto."><span>CRÉDITOS</span></button>
       </nav>
       <p class="box--dark dialog" id="menu-hint" aria-live="polite"></p>
+    </section>
+    <section class="screen screen--online" id="screen-online" data-screen="online" data-back="menu" aria-labelledby="pvp-heading" hidden>
+      <div class="box pvp-lobby">
+        <h2 id="pvp-heading">PVP ONLINE 6X6</h2>
+        <p>Crie uma sala e compartilhe o código com seu adversário.</p>
+        <button class="btn btn--primary" type="button" id="pvp-create-room">CRIAR SALA</button>
+        <label for="pvp-room-code">OU INFORME O CÓDIGO DA SALA</label>
+        <div class="pvp-lobby__join">
+          <input id="pvp-room-code" type="text" maxlength="6" autocomplete="off" spellcheck="false" placeholder="CÓDIGO" aria-label="Código da sala">
+          <button class="btn" type="button" id="pvp-join-room">ENTRAR</button>
+        </div>
+        <p id="pvp-lobby-status" class="pvp-lobby__status" aria-live="polite"></p>
+        <button class="btn" type="button" data-goto="menu">VOLTAR</button>
+      </div>
     </section>
     <section class="screen screen--credits backdrop" id="screen-credits" data-screen="credits" data-back="menu" hidden aria-labelledby="credits-heading">
       <div class="box credits">
@@ -57,6 +72,22 @@
         <button class="btn btn--primary" type="button" id="btn-confirm" data-action="confirm" disabled>ESCOLHER</button>
       </footer>
     </section>
+    <section class="screen screen--selection screen--pvp-team" id="screen-pvp-team" data-screen="pvp-team" hidden aria-labelledby="pvp-team-heading">
+      <header class="selection__header">
+        <h2 id="pvp-team-heading">MONTE SUA EQUIPE 6X6</h2>
+        <p class="pvp-team__code">SALA <strong id="pvp-team-code"></strong></p>
+      </header>
+      <div class="selection__grid" id="pvp-catalog" data-nav="grid" data-cols="5" role="group" aria-label="Escolha seis Pokémon"></div>
+      <aside class="box selection__preview pvp-party" aria-live="polite">
+        <h3>SUA EQUIPE</h3>
+        <ol id="pvp-party-list" class="pvp-party__list"></ol>
+        <p id="pvp-team-message" class="pvp-team__message">Escolha seis Pokémon diferentes.</p>
+      </aside>
+      <footer class="selection__footer">
+        <button class="btn" type="button" data-action="pvp-exit">SAIR DA SALA</button>
+        <button class="btn btn--primary" type="button" id="pvp-team-ready" disabled>PRONTO (0/6)</button>
+      </footer>
+    </section>
     <section class="screen screen--battle" id="screen-battle" data-screen="battle" hidden aria-label="Batalha">
       <div class="battle__field">
         <div class="battle__bg" id="battle-bg"></div>
@@ -80,6 +111,7 @@
         <p class="battle__text box--dark" id="battle-text" aria-live="polite"></p>
         <div class="battle__actions box" data-nav="vertical">
           <button class="menu-item" type="button" id="btn-fight">LUTAR</button>
+          <button class="menu-item" type="button" id="btn-switch" hidden>TROCAR</button>
           <button class="menu-item" type="button" id="btn-quit">DESISTIR</button>
         </div>
         <div class="battle__moves box">

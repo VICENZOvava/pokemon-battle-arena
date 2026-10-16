@@ -1,6 +1,8 @@
 import { mountSelection } from './src/ui/selection.js';
 import { mountBattle } from './src/ui/battleScreen.js';
 import { createTowerRoster, getTowerEnemyLevel, TOWER_FLOORS } from './src/battle/tower.js';
+import { mountPvpBattle, mountPvpLobby, mountPvpTeam } from './src/ui/pvp.js';
+import { leavePvpRoom } from './src/api/pvpClient.js';
 
 const STORAGE_KEY = 'pba:settings:v1';
 const DIFFICULTIES = [
@@ -26,9 +28,9 @@ function loadSettings() {
   }
 }
 
-const state = { screen: 'title', playerId: null, gameMode: 'classic', andar_atual: 1, towerOpponents: null, settings: loadSettings() };
+const state = { screen: 'title', playerId: null, gameMode: 'classic', pvpSession: null, andar_atual: 1, towerOpponents: null, settings: loadSettings() };
 const screens = Object.fromEntries($$('.screen').map((screen) => [screen.dataset.screen, screen]));
-const controllers = { selection: null, battle: null };
+const controllers = { selection: null, battle: null, pvpLobby: null, pvpTeam: null };
 const music = $('#battle-music');
 let busy = false;
 let musicUnlocked = false;
@@ -123,20 +125,25 @@ async function enterBattle() {
   });
   $('#player-sprite-fallback').hidden = true;
   $('#enemy-sprite-fallback').hidden = true;
+  $('#btn-switch').hidden = true;
+  $('#btn-quit').textContent = 'DESISTIR';
+  $('#btn-result-menu').dataset.goto = 'menu';
+  delete $('#btn-result-menu').dataset.action;
   $('#battle-dialog').dataset.mode = 'text';
   $('#battle-text').textContent = 'Preparando a batalha…';
   $('#move-buttons').replaceChildren();
   $('#move-info').replaceChildren();
 
   try {
-    const controller = await mountBattle(screens.battle, {
+    const controller = await (state.gameMode === 'pvp' ? mountPvpBattle : mountBattle)(screens.battle, {
+      session: state.pvpSession,
       playerId: state.playerId,
       enemyId: state.gameMode === 'tower' ? state.towerOpponents[state.andar_atual - 1] : null,
       enemyLevel: state.gameMode === 'tower' ? getTowerEnemyLevel(state.andar_atual) : 50,
       mode: state.gameMode,
       floor: state.andar_atual,
       difficulty: state.settings.difficulty,
-      onExit: () => state.gameMode === 'tower' ? exitTower() : go('menu'),
+      onExit: () => state.gameMode === 'pvp' ? exitOnline() : state.gameMode === 'tower' ? exitTower() : go('menu'),
       onTowerResult(won) {
         if (state.gameMode !== 'tower') return;
         if (won) state.andar_atual += 1;
@@ -167,6 +174,20 @@ async function enterBattle() {
 const onEnter = {
   menu() { $('#menu-hint').textContent = ''; },
   selection: enterSelection,
+  online() {
+    state.gameMode = 'pvp';
+    controllers.pvpLobby = mountPvpLobby(screens.online, {
+      onRoom(session) { state.pvpSession = session; go('pvp-team'); },
+    });
+  },
+  async ['pvp-team']() {
+    if (!state.pvpSession) { go('online'); return; }
+    state.gameMode = 'pvp';
+    controllers.pvpTeam = await mountPvpTeam(screens['pvp-team'], {
+      session: state.pvpSession,
+      onBattle: () => go('battle', { force: true }),
+    });
+  },
   battle: enterBattle,
 };
 
@@ -181,6 +202,8 @@ async function go(name, { force = false } = {}) {
       await wait(180);
     }
     if (state.screen === 'battle') destroyController('battle');
+    if (state.screen === 'online') destroyController('pvpLobby');
+    if (state.screen === 'pvp-team') destroyController('pvpTeam');
     Object.entries(screens).forEach(([key, screen]) => { screen.hidden = key !== name; });
     state.screen = name;
   } finally {
@@ -209,6 +232,20 @@ function startTower() {
   go('selection');
 }
 
+function startPvp() {
+  state.gameMode = 'pvp';
+  state.pvpSession = null;
+  go('online');
+}
+
+function exitOnline() {
+  const session = state.pvpSession;
+  state.pvpSession = null;
+  state.gameMode = 'classic';
+  if (session) leavePvpRoom(session).catch(() => {});
+  go('menu');
+}
+
 function startBattle() {
   if (state.playerId == null) return;
   if (state.gameMode === 'tower' && !state.towerOpponents) {
@@ -235,6 +272,8 @@ function exitTower() {
 
 const actions = {
   play: startClassicSelection,
+  pvp: startPvp,
+  'pvp-exit': exitOnline,
   tower: startTower,
   'tower-next': startBattle,
   'tower-retry': retryTower,
