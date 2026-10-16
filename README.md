@@ -1,39 +1,65 @@
 # Pokémon Battle Arena
 
-Jogo de batalha por turnos no navegador, com interface em português e visual inspirado nos jogos clássicos.
+Jogo de batalha por turnos para navegador, com interface em português, partidas individuais, modo Torre e PvP online 6 contra 6.
 
-## Como jogar localmente
+## Requisitos
 
-Use Node.js 18 ou mais recente. Execute `npm start` na pasta do projeto e abra **http://localhost:3000**. Clique em **APERTE START**, escolha um Pokémon e selecione **LUTAR** para ver seus golpes. Escape volta para a tela anterior; as setas navegam pelos menus e listas.
+- Node.js 18 ou mais recente
+- npm
 
-## Conteúdo
+## Rodar localmente
 
-- Catálogo da primeira geração carregado pela PokéAPI quando há conexão.
-- Pokédex local de reserva e golpes locais para iniciar partidas sem a API.
-- Tipos, efetividade, dano, precisão, STAB, crítico e ordem por velocidade.
-- IA com dificuldades fácil, normal e difícil.
-- Preferências de música e dificuldade salvas no navegador.
-- Modo batalha de torre (1 a 10).
-- Música em loop carregada de `assets/audio`.
+Na pasta do projeto, instale as dependências e inicie o servidor:
 
-O catálogo usa a PokéAPI e sprites públicos do projeto PokeAPI. Sem conexão, a seleção local continua jogável; sprites remotos podem não aparecer.
+    npm install
+    npm start
 
-## PvP online 6x6
+Abra <http://localhost:3000>. O servidor usa a porta definida pela variável PORT, ou 3000 quando ela não estiver definida.
 
-No menu, escolha **PVP ONLINE 6X6**. Um jogador cria a sala e compartilha o código; o outro entra com esse código. Cada um seleciona seis Pokémon diferentes da primeira geração. Em cada turno, quem tem mais vida no Pokémon ativo escolhe primeiro; se a vida empatar, a ordem é aleatória. O turno só é resolvido depois que os dois jogadores escolhem. Trocas consomem a ação e, quando um Pokémon desmaia, seu treinador escolhe um substituto.
+As salas PvP funcionam localmente sem Redis, mas ficam apenas na memória e são apagadas quando o servidor reinicia. Para manter as salas entre reinícios, configure uma das opções de Redis descritas abaixo.
+
+## Como jogar
+
+Na tela inicial, pressione **APERTE START**. Use as setas para navegar, Enter para confirmar e Escape para voltar.
+
+- **Nova batalha:** escolha um Pokémon e lute contra um adversário controlado pelo jogo.
+- **Batalha da Torre:** enfrente até 10 andares consecutivos.
+- **PvP Online 6x6:** um jogador cria uma sala e compartilha o código; o outro entra com esse código. Cada jogador escolhe seis Pokémon diferentes e confirma a equipe.
+- **Dificuldade e música:** ajuste as preferências no menu.
+
+No PvP, o jogador cujo Pokémon ativo tem mais HP escolhe sua ação primeiro. Se o HP for igual, a ordem é aleatória. Cada treinador escolhe uma ação por vez; o turno é resolvido depois das duas escolhas. Trocar de Pokémon consome a ação. Quando um Pokémon é derrotado, seu treinador escolhe um substituto.
 
 ## Publicar no Render
 
-O servidor Node serve a interface e as rotas PvP. O arquivo render.yaml configura um Web Service, a verificação de saúde em /healthz e um Render Key Value para manter as salas PvP salvas entre reinícios.
+O arquivo render.yaml configura o servidor Node, a rota de verificação /healthz e um recurso Render Key Value para armazenar as salas PvP.
 
-1. No Render, crie ou sincronize um Blueprint apontando para este repositório e para a branch publicada.
-2. Confirme que o Web Service corresponde ao projeto atual e que o recurso Key Value pokemon-battle-arena-rooms será criado ou conectado.
-3. O Blueprint configura npm install como build, npm start como comando inicial e liga o Redis por REDIS_URL.
+1. No painel do Render, crie ou sincronize um Blueprint usando este repositório.
+2. Confirme a criação do Web Service e do Key Value definidos em render.yaml.
+3. Aguarde o deploy. O Blueprint usa npm install para instalar as dependências e npm start para iniciar o servidor.
+4. Abra o endereço do Web Service e teste o jogo em duas janelas ou dispositivos.
 
-Se o Web Service já foi criado manualmente, sincronize o Blueprint para conectar o Key Value. Também é possível criar o Key Value no painel e definir REDIS_URL nas variáveis do Web Service usando a URL interna do Redis. O app e o Key Value precisam estar na mesma região.
+O Blueprint configura REDIS_URL com a conexão interna do Key Value. Para uma configuração manual, crie o Web Service com build command npm install, start command npm start e health check path /healthz. Configure REDIS_URL com a URL interna de um Redis na mesma região do serviço.
 
-Sem Redis, as salas ficam apenas na memória do processo e se perdem quando o servidor reinicia. Com Redis conectado, elas ficam salvas por até duas horas após a última atividade. O Render pode suspender serviços gratuitos sem tráfego; o primeiro acesso depois da suspensão pode demorar enquanto o serviço inicia.
+Também é possível usar Upstash Redis. Configure no ambiente do servidor UPSTASH_REDIS_REST_URL e UPSTASH_REDIS_REST_TOKEN. Como alternativa, o servidor reconhece KV_REST_API_URL e KV_REST_API_TOKEN.
 
-## Executar o servidor local
+Sem uma conexão Redis válida, o servidor ainda permite criar salas, mas elas ficam apenas na memória do processo e se perdem quando ele reinicia. As salas expiram após duas horas sem atividade.
 
-`npm start` serve os arquivos e o PvP no mesmo servidor Node. Nesse modo local, as salas ficam na memória do processo e são perdidas quando o servidor reinicia.
+Hospedagens estáticas, como GitHub Pages, não executam o servidor Node necessário para o PvP. Para jogar online, use uma hospedagem que rode o servidor, como o Render configurado pelo Blueprint.
+
+## Dados e créditos
+
+O catálogo local contém os nomes dos 151 Pokémon da primeira geração. A PokéAPI fornece dados adicionais de espécies e sprites. Se o servidor não conseguir obter os dados de batalha de uma espécie, ele usa valores de contingência para permitir que a equipe seja confirmada.
+
+Os golpes e a tabela de tipos também têm dados locais no diretório data. As preferências de música e dificuldade são salvas no navegador.
+
+Pokémon e seus personagens pertencem aos respectivos titulares. Este projeto é independente e não é afiliado à Nintendo, à Game Freak ou à The Pokémon Company.
+
+## Estrutura do projeto
+
+- main.js: inicialização, navegação entre telas e modos de jogo.
+- server.mjs: servidor web, API e estado das salas PvP.
+- src/battle: dano, efetividade, regras de batalha, IA e Torre.
+- src/api: comunicação com PokéAPI e API PvP.
+- src/ui: telas de seleção, batalha e PvP.
+- data: dados locais de Pokémon, golpes e tipos.
+- render.yaml: configuração de hospedagem no Render.
